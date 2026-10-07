@@ -1,15 +1,10 @@
 import express from "express";
-import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
-
-const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-});
 
 app.get("/", (req, res) => {
     res.send("Xiaozhi Gemini Server funcionando!");
@@ -25,27 +20,61 @@ app.post("/chat", async (req, res) => {
             });
         }
 
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: message,
-            config: {
-                systemInstruction:
-                    "Você é o Xiaozhi, um pequeno robô inteligente, divertido e amigável. Responda em português do Brasil de forma natural e curta."
+        const response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": process.env.GEMINI_API_KEY
+                },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    text: message
+                                }
+                            ]
+                        }
+                    ],
+                    systemInstruction: {
+                        parts: [
+                            {
+                                text: "Você é o Xiaozhi, um pequeno robô inteligente, divertido e amigável. Responda em português do Brasil de forma natural e curta."
+                            }
+                        ]
+                    }
+                })
             }
-        });
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("Erro Gemini:", JSON.stringify(data));
+            return res.status(response.status).json(data);
+        }
+
+        const text =
+            data.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "Não consegui gerar uma resposta.";
 
         res.json({
-            response: response.text
+            response: text
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Erro no servidor:", error);
 
         res.status(500).json({
-            error: "Erro ao consultar Gemini",
-            details: error.message
+            error: error.message
         });
     }
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(Servidor rodando na porta ${PORT});
 });
 
 app.listen(PORT, "0.0.0.0", () => {
