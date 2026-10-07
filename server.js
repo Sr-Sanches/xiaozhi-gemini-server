@@ -1,4 +1,6 @@
 import express from "express";
+import { WebSocketServer } from "ws";
+import http from "http";
 
 const app = express();
 
@@ -6,9 +8,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
+// ===============================
+// HTTP
+// ===============================
+
 app.get("/", (req, res) => {
     res.send("Xiaozhi Gemini Server funcionando!");
 });
+
+// ===============================
+// TESTE GEMINI
+// ===============================
 
 app.post("/chat", async (req, res) => {
     try {
@@ -74,6 +84,164 @@ app.post("/chat", async (req, res) => {
     }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+// ===============================
+// SERVIDOR HTTP
+// ===============================
+
+const server = http.createServer(app);
+
+// ===============================
+// WEBSOCKET
+// ===============================
+
+const wss = new WebSocketServer({
+    server
+});
+
+wss.on("connection", (ws, req) => {
+
+    console.log("=================================");
+    console.log("Novo cliente WebSocket conectado");
+    console.log("IP:", req.socket.remoteAddress);
+    console.log("=================================");
+
+    let sessionId = crypto.randomUUID();
+
+    ws.on("message", async (data, isBinary) => {
+
+        // ===========================
+        // MENSAGEM BINÁRIA
+        // ===========================
+
+        if (isBinary) {
+
+            console.log(
+                "Áudio recebido:",
+                data.length,
+                "bytes"
+            );
+
+            // Por enquanto não vamos processar o áudio.
+            // Depois vamos ligar o STT aqui.
+
+            return;
+        }
+
+        // ===========================
+        // MENSAGEM JSON
+        // ===========================
+
+        try {
+
+            const message = JSON.parse(data.toString());
+
+            console.log(
+                "JSON recebido:",
+                JSON.stringify(message)
+            );
+
+            // ===========================
+            // HELLO
+            // ===========================
+
+            if (message.type === "hello") {
+
+                console.log("Hello recebido do Xiaozhi");
+
+                ws.send(
+                    JSON.stringify({
+                        type: "hello",
+                        transport: "websocket",
+                        session_id: sessionId,
+                        audio_params: {
+                            format: "opus",
+                            sample_rate: 16000,
+                            channels: 1,
+                            frame_duration: 60
+                        }
+                    })
+                );
+
+                console.log(
+                    "Hello enviado. Session:",
+                    sessionId
+                );
+
+                return;
+            }
+
+            // ===========================
+            // LISTEN
+            // ===========================
+
+            if (message.type === "listen") {
+
+                console.log(
+                    "Listen:",
+                    message.state,
+                    message.mode || ""
+                );
+
+                return;
+            }
+
+            // ===========================
+            // ABORT
+            // ===========================
+
+            if (message.type === "abort") {
+
+                console.log(
+                    "Abort recebido:",
+                    message.reason || ""
+                );
+
+                return;
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Erro ao processar WebSocket:",
+                error
+            );
+
+        }
+
+    });
+
+    ws.on("close", () => {
+
+        console.log(
+            "Cliente WebSocket desconectado:",
+            sessionId
+        );
+
+    });
+
+    ws.on("error", (error) => {
+
+        console.error(
+            "Erro WebSocket:",
+            error
+        );
+
+    });
+
+});
+
+// ===============================
+// INICIAR SERVIDOR
+// ===============================
+
+server.listen(PORT, "0.0.0.0", () => {
+
+    console.log(
+        `Servidor rodando na porta ${PORT}`
+    );
+
+    console.log(
+        "WebSocket disponível no mesmo endereço"
+    );
+
 });
