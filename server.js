@@ -1,12 +1,14 @@
 import express from "express";
 import { WebSocketServer } from "ws";
 import http from "http";
-import { randomUUID, createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const OpusScript = require("opusscript");
 
 const app = express();
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
@@ -32,14 +34,19 @@ app.get("/", (req, res) => {
    ========================================================= */
 
 app.post("/chat", async (req, res) => {
+
     try {
+
         const message = req.body.message;
 
         if (!message) {
+
             return res.status(400).json({
                 error: "Mensagem não informada"
             });
+
         }
+
 
         const response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
@@ -52,6 +59,7 @@ app.post("/chat", async (req, res) => {
                 },
 
                 body: JSON.stringify({
+
                     contents: [
                         {
                             parts: [
@@ -70,28 +78,38 @@ app.post("/chat", async (req, res) => {
                             }
                         ]
                     }
+
                 })
             }
         );
 
+
         const data = await response.json();
 
+
         if (!response.ok) {
+
             console.error(
                 "Erro Gemini:",
                 JSON.stringify(data)
             );
 
-            return res.status(response.status).json(data);
+            return res
+                .status(response.status)
+                .json(data);
+
         }
+
 
         const text =
             data.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Não consegui gerar uma resposta.";
 
+
         res.json({
             response: text
         });
+
 
     } catch (error) {
 
@@ -103,7 +121,9 @@ app.post("/chat", async (req, res) => {
         res.status(500).json({
             error: error.message
         });
+
     }
+
 });
 
 
@@ -114,12 +134,16 @@ app.post("/chat", async (req, res) => {
 app.get("/xiaozhi/ota/", (req, res) => {
 
     res.json({
-        message: "Xiaozhi OTA funcionando!",
+
+        message:
+            "Xiaozhi OTA funcionando!",
 
         websocket: {
             url: WEBSOCKET_URL
         }
+
     });
+
 });
 
 
@@ -145,48 +169,69 @@ app.post("/xiaozhi/ota/", (req, res) => {
 
     console.log("=================================");
 
+
     const deviceVersion =
-        req.body?.application?.version || "0.0.0";
+        req.body?.application?.version ||
+        "0.0.0";
+
 
     res.json({
 
         server_time: {
+
             timestamp: Date.now(),
+
             timezone_offset: -180
+
         },
+
 
         firmware: {
+
             version: deviceVersion,
+
             url: ""
+
         },
 
+
         websocket: {
+
             url: WEBSOCKET_URL,
+
             token: XIAOZHI_TOKEN
+
         }
+
     });
+
 });
 
 
 /* =========================================================
-   SERVIDOR HTTP + WEBSOCKET
+   SERVIDOR HTTP
    ========================================================= */
 
-const server = http.createServer(app);
-
-const wss = new WebSocketServer({
-    server
-});
+const server =
+    http.createServer(app);
 
 
 /* =========================================================
-   CONEXÃO DO XIAOZHI
+   WEBSOCKET
    ========================================================= */
+
+const wss =
+    new WebSocketServer({
+        server
+    });
+
 
 wss.on("connection", (ws, req) => {
 
+
     const clientIp =
         req.socket.remoteAddress;
+
 
     const requestUrl =
         req.url || "/";
@@ -195,30 +240,36 @@ wss.on("connection", (ws, req) => {
     console.log("=================================");
     console.log("NOVO CLIENTE WEBSOCKET");
 
+
     console.log(
         "URL:",
         requestUrl
     );
+
 
     console.log(
         "IP:",
         clientIp
     );
 
+
     console.log(
         "Device-ID:",
         req.headers["device-id"]
     );
+
 
     console.log(
         "Client-ID:",
         req.headers["client-id"]
     );
 
+
     console.log(
         "Protocol-Version:",
         req.headers["protocol-version"]
     );
+
 
     console.log(
         "Authorization:",
@@ -226,6 +277,7 @@ wss.on("connection", (ws, req) => {
             ? "recebido"
             : "ausente"
     );
+
 
     console.log("=================================");
 
@@ -237,6 +289,7 @@ wss.on("connection", (ws, req) => {
     const authorization =
         req.headers["authorization"] || "";
 
+
     const expected =
         `Bearer ${XIAOZHI_TOKEN}`;
 
@@ -247,12 +300,15 @@ wss.on("connection", (ws, req) => {
             "Token inválido."
         );
 
+
         ws.close(
             1008,
             "Unauthorized"
         );
 
+
         return;
+
     }
 
 
@@ -262,11 +318,12 @@ wss.on("connection", (ws, req) => {
 
 
     /* =====================================================
-       SESSÃO
+       CRIA SESSÃO
        ===================================================== */
 
     const sessionId =
         randomUUID();
+
 
     console.log(
         "Session:",
@@ -277,8 +334,7 @@ wss.on("connection", (ws, req) => {
     /* =====================================================
        DECODIFICADOR OPUS
        
-       Xiaozhi:
-       16 kHz
+       16000 Hz
        Mono
        ===================================================== */
 
@@ -296,7 +352,7 @@ wss.on("connection", (ws, req) => {
 
 
     /* =====================================================
-       RECEBIMENTO DE MENSAGENS
+       RECEBE MENSAGENS
        ===================================================== */
 
     ws.on(
@@ -319,11 +375,6 @@ wss.on("connection", (ws, req) => {
 
                 try {
 
-                    /*
-                     * Decodifica o pacote Opus
-                     * para PCM 16-bit.
-                     */
-
                     const pcm =
                         opusDecoder.decode(data);
 
@@ -341,15 +392,17 @@ wss.on("connection", (ws, req) => {
                         "Erro ao decodificar Opus:",
                         error.message
                     );
+
                 }
 
 
                 return;
+
             }
 
 
             /* =============================================
-               MENSAGENS JSON
+               JSON
                ============================================= */
 
             try {
@@ -384,21 +437,28 @@ wss.on("connection", (ws, req) => {
 
                             type: "hello",
 
-                            transport: "websocket",
+                            transport:
+                                "websocket",
 
                             session_id:
                                 sessionId,
 
                             audio_params: {
 
-                                format: "opus",
+                                format:
+                                    "opus",
 
-                                sample_rate: 16000,
+                                sample_rate:
+                                    16000,
 
-                                channels: 1,
+                                channels:
+                                    1,
 
-                                frame_duration: 60
+                                frame_duration:
+                                    60
+
                             }
+
                         })
                     );
 
@@ -409,6 +469,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -428,6 +489,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -446,6 +508,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -463,6 +526,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -472,13 +536,15 @@ wss.on("connection", (ws, req) => {
                     "Erro ao processar JSON:",
                     error
                 );
+
             }
+
         }
     );
 
 
     /* =====================================================
-       CLIENTE DESCONECTOU
+       DESCONECTOU
        ===================================================== */
 
     ws.on(
@@ -491,11 +557,6 @@ wss.on("connection", (ws, req) => {
             );
 
 
-            /*
-             * Libera memória utilizada
-             * pelo decoder Opus.
-             */
-
             try {
 
                 opusDecoder.delete();
@@ -506,7 +567,9 @@ wss.on("connection", (ws, req) => {
                     "Erro ao liberar decoder:",
                     error.message
                 );
+
             }
+
         }
     );
 
@@ -523,6 +586,7 @@ wss.on("connection", (ws, req) => {
                 "Erro WebSocket:",
                 error
             );
+
         }
     );
 
@@ -553,5 +617,6 @@ server.listen(
         console.log(
             "OTA: OK"
         );
+
     }
 );
