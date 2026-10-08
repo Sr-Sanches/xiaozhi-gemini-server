@@ -19,112 +19,196 @@ const XIAOZHI_TOKEN =
 const WEBSOCKET_URL =
     "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
-/* ==============================
+/* =========================================================
    CONFIGURAÇÃO DO VAD
-================================ */
+========================================================= */
 
 const VOICE_THRESHOLD = 1800;
+
 const SILENCE_FRAMES_TO_END = 15;
+
 const VOICE_FRAMES_TO_START = 2;
 
-/* ==============================
+
+/* =========================================================
    ROOT
-================================ */
+========================================================= */
 
 app.get("/", (req, res) => {
-    res.send("Xiaozhi Gemini Server funcionando!");
+
+    res.send(
+        "Xiaozhi Gemini Server funcionando!"
+    );
+
 });
 
-/* ==============================
-   GEMINI - CHAT
-================================ */
+
+/* =========================================================
+   CHAT HTTP
+========================================================= */
 
 app.post("/chat", async (req, res) => {
+
     try {
-        const message = req.body.message;
+
+        const message =
+            req.body.message;
 
         if (!message) {
+
             return res.status(400).json({
-                error: "Mensagem não informada"
+
+                error:
+                    "Mensagem não informada"
+
             });
+
         }
 
-        const response = await fetch(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-            {
-                method: "POST",
 
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": process.env.GEMINI_API_KEY
-                },
+        const response =
+            await fetch(
 
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "x-goog-api-key":
+                            process.env.GEMINI_API_KEY
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            contents: [
+
                                 {
-                                    text: message
+
+                                    parts: [
+
+                                        {
+
+                                            text:
+                                                message
+
+                                        }
+
+                                    ]
+
                                 }
-                            ]
-                        }
-                    ],
 
-                    systemInstruction: {
-                        parts: [
-                            {
-                                text:
-                                    "Você é o Xiaozhi, um pequeno robô inteligente, divertido e amigável. Responda em português do Brasil de forma natural e curta."
+                            ],
+
+                            systemInstruction: {
+
+                                parts: [
+
+                                    {
+
+                                        text:
+                                            "Você é o Xiaozhi, um pequeno robô inteligente, divertido e amigável. Responda em português do Brasil de forma natural e curta."
+
+                                    }
+
+                                ]
+
                             }
-                        ]
-                    }
-                })
-            }
-        );
 
-        const data = await response.json();
+                        })
 
-        if (!response.ok) {
-            console.error(
-                "Erro Gemini:",
-                JSON.stringify(data)
+                }
+
             );
 
-            return res.status(response.status).json(data);
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            console.error(
+
+                "Erro Gemini:",
+
+                JSON.stringify(data)
+
+            );
+
+            return res.status(
+                response.status
+            ).json(data);
+
         }
+
 
         const text =
             data.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Não consegui gerar uma resposta.";
 
+
         res.json({
-            response: text
+
+            response:
+                text
+
         });
+
 
     } catch (error) {
 
         console.error(
+
             "Erro no servidor:",
+
             error
+
         );
 
         res.status(500).json({
-            error: error.message
+
+            error:
+                error.message
+
         });
+
     }
+
 });
 
-/* ==============================
-   CONVERTE PCM PARA WAV
-================================ */
 
-function pcmToWav(pcmBuffers) {
+/* =========================================================
+   CONVERTER PCM PARA WAV
+========================================================= */
 
-    const pcm = Buffer.concat(pcmBuffers);
+function pcmToWav(
+    pcmBuffers
+) {
 
-    const sampleRate = 16000;
-    const channels = 1;
-    const bitsPerSample = 16;
+    const pcm =
+        Buffer.concat(
+            pcmBuffers
+        );
+
+
+    const sampleRate =
+        16000;
+
+    const channels =
+        1;
+
+    const bitsPerSample =
+        16;
+
 
     const byteRate =
         sampleRate *
@@ -132,27 +216,43 @@ function pcmToWav(pcmBuffers) {
         bitsPerSample /
         8;
 
+
     const blockAlign =
         channels *
         bitsPerSample /
         8;
 
-    const wav = Buffer.alloc(44 + pcm.length);
+
+    const wav =
+        Buffer.alloc(
+            44 + pcm.length
+        );
+
 
     /* RIFF */
 
-    wav.write("RIFF", 0);
+    wav.write(
+        "RIFF",
+        0
+    );
 
     wav.writeUInt32LE(
         36 + pcm.length,
         4
     );
 
-    wav.write("WAVE", 8);
+    wav.write(
+        "WAVE",
+        8
+    );
+
 
     /* fmt */
 
-    wav.write("fmt ", 12);
+    wav.write(
+        "fmt ",
+        12
+    );
 
     wav.writeUInt32LE(
         16,
@@ -189,124 +289,186 @@ function pcmToWav(pcmBuffers) {
         34
     );
 
+
     /* data */
 
-    wav.write("data", 36);
+    wav.write(
+        "data",
+        36
+    );
 
     wav.writeUInt32LE(
         pcm.length,
         40
     );
 
+
     pcm.copy(
         wav,
         44
     );
 
+
     return wav;
+
 }
 
-/* ==============================
-   STT
-================================ */
 
-async function transcribeAudio(pcmBuffers) {
+/* =========================================================
+   STT
+========================================================= */
+
+async function transcribeAudio(
+    pcmBuffers
+) {
 
     try {
 
-        if (!pcmBuffers || pcmBuffers.length === 0) {
+        if (
+            !pcmBuffers ||
+            pcmBuffers.length === 0
+        ) {
 
             console.log(
                 "STT: nenhum áudio para transcrever."
             );
 
             return null;
+
         }
 
-        const wav = pcmToWav(
-            pcmBuffers
-        );
+
+        const wav =
+            pcmToWav(
+                pcmBuffers
+            );
+
 
         console.log("");
+
         console.log(
             "================================="
         );
+
         console.log(
             "📝 ENVIANDO ÁUDIO PARA STT"
         );
+
         console.log(
             "WAV:",
             wav.length,
             "bytes"
         );
+
         console.log(
             "================================="
         );
 
+
         const audioBase64 =
-            wav.toString("base64");
+            wav.toString(
+                "base64"
+            );
 
-        const response = await fetch(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-            {
-                method: "POST",
 
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-goog-api-key":
-                        process.env.GEMINI_API_KEY
-                },
+        const response =
+            await fetch(
 
-                body: JSON.stringify({
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
 
-                    contents: [
-                        {
-                            parts: [
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "x-goog-api-key":
+                            process.env.GEMINI_API_KEY
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            contents: [
 
                                 {
-                                    inlineData: {
-                                        mimeType:
-                                            "audio/wav",
-                                        data:
-                                            audioBase64
-                                    }
-                                },
 
-                                {
-                                    text:
-                                        "Transcreva exatamente o que foi falado neste áudio. O áudio está em português do Brasil. Retorne somente a transcrição, sem explicações, sem comentários e sem responder à pergunta."
+                                    parts: [
+
+                                        {
+
+                                            inlineData: {
+
+                                                mimeType:
+                                                    "audio/wav",
+
+                                                data:
+                                                    audioBase64
+
+                                            }
+
+                                        },
+
+                                        {
+
+                                            text:
+                                                "Transcreva exatamente o que foi falado neste áudio. O áudio está em português do Brasil. Retorne somente a transcrição, sem explicações, sem comentários e sem responder à pergunta."
+
+                                        }
+
+                                    ]
+
                                 }
 
-                            ]
-                        }
-                    ],
+                            ],
 
-                    generationConfig: {
-                        temperature: 0
-                    }
+                            generationConfig: {
 
-                })
-            }
-        );
+                                temperature:
+                                    0
+
+                            }
+
+                        })
+
+                }
+
+            );
+
 
         const data =
             await response.json();
 
+
         if (!response.ok) {
 
             console.error(
+
                 "❌ Erro no STT:",
+
                 JSON.stringify(data)
+
             );
 
             return null;
+
         }
+
 
         const text =
             data.candidates?.[0]?.content?.parts
-                ?.map(part => part.text || "")
+                ?.map(
+                    part =>
+                        part.text || ""
+                )
                 .join("")
                 .trim();
+
 
         if (!text) {
 
@@ -320,140 +482,366 @@ async function transcribeAudio(pcmBuffers) {
             );
 
             return null;
+
         }
 
+
         console.log("");
+
         console.log(
             "================================="
         );
+
         console.log(
             "📝 STT RESULTADO:"
         );
+
         console.log(
             text
         );
+
         console.log(
             "================================="
         );
+
         console.log("");
 
+
         return text;
+
 
     } catch (error) {
 
         console.error(
+
             "❌ Erro ao executar STT:",
+
+            error
+
+        );
+
+        return null;
+
+    }
+
+}
+
+
+/* =========================================================
+   GEMINI
+========================================================= */
+
+async function askGemini(
+    text
+) {
+
+    try {
+
+        console.log("");
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "🧠 ENVIANDO TEXTO PARA GEMINI"
+        );
+
+        console.log(
+            "Texto:",
+            text
+        );
+
+        console.log(
+            "================================="
+        );
+
+
+        const response =
+            await fetch(
+
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "x-goog-api-key":
+                            process.env.GEMINI_API_KEY
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            contents: [
+
+                                {
+
+                                    parts: [
+
+                                        {
+
+                                            text:
+                                                text
+
+                                        }
+
+                                    ]
+
+                                }
+
+                            ],
+
+                            systemInstruction: {
+
+                                parts: [
+
+                                    {
+
+                                        text:
+                                            "Você é o Xiaozhi, um pequeno robô inteligente, divertido e amigável. Responda em português do Brasil de forma natural, simpática e curta. Não faça respostas excessivamente longas."
+
+                                    }
+
+                                ]
+
+                            },
+
+                            generationConfig: {
+
+                                temperature:
+                                    0.7
+
+                            }
+
+                        })
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            console.error("");
+
+            console.error(
+                "❌ ERRO GEMINI:"
+            );
+
+            console.error(
+                JSON.stringify(data)
+            );
+
+            return null;
+
+        }
+
+
+        const reply =
+            data.candidates?.[0]?.content?.parts
+                ?.map(
+                    part =>
+                        part.text || ""
+                )
+                .join("")
+                .trim();
+
+
+        if (!reply) {
+
+            console.log(
+                "⚠️ Gemini não retornou resposta."
+            );
+
+            console.log(
+                "Resposta:",
+                JSON.stringify(data)
+            );
+
+            return null;
+
+        }
+
+
+        console.log("");
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "🧠 GEMINI RESPONDEU:"
+        );
+
+        console.log(
+            reply
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log("");
+
+
+        return reply;
+
+
+    } catch (error) {
+
+        console.error("");
+
+        console.error(
+            "❌ ERRO AO CHAMAR GEMINI:"
+        );
+
+        console.error(
             error
         );
 
         return null;
+
     }
+
 }
 
-/* ==============================
-   OTA
-================================ */
 
-app.get("/xiaozhi/ota/", (req, res) => {
+/* =========================================================
+   OTA GET
+========================================================= */
 
-    res.json({
+app.get(
+    "/xiaozhi/ota/",
+    (req, res) => {
 
-        message:
-            "Xiaozhi OTA funcionando!",
+        res.json({
 
-        websocket: {
-            url:
-                WEBSOCKET_URL
-        }
+            message:
+                "Xiaozhi OTA funcionando!",
 
-    });
+            websocket: {
 
-});
+                url:
+                    WEBSOCKET_URL
 
-app.post("/xiaozhi/ota/", (req, res) => {
+            }
 
-    console.log(
-        "================================="
-    );
+        });
 
-    console.log(
-        "OTA REQUEST RECEBIDO"
-    );
+    }
+);
 
-    console.log(
-        "Device-ID:",
-        req.headers["device-id"]
-    );
 
-    console.log(
-        "Client-ID:",
-        req.headers["client-id"]
-    );
+/* =========================================================
+   OTA POST
+========================================================= */
 
-    console.log(
-        "User-Agent:",
-        req.headers["user-agent"]
-    );
+app.post(
+    "/xiaozhi/ota/",
+    (req, res) => {
 
-    console.log(
-        "================================="
-    );
+        console.log(
+            "================================="
+        );
 
-    const deviceVersion =
-        req.body?.application?.version ||
-        "0.0.0";
+        console.log(
+            "OTA REQUEST RECEBIDO"
+        );
 
-    res.json({
+        console.log(
+            "Device-ID:",
+            req.headers["device-id"]
+        );
 
-        server_time: {
+        console.log(
+            "Client-ID:",
+            req.headers["client-id"]
+        );
 
-            timestamp:
-                Date.now(),
+        console.log(
+            "User-Agent:",
+            req.headers["user-agent"]
+        );
 
-            timezone_offset:
-                -180
+        console.log(
+            "================================="
+        );
 
-        },
 
-        firmware: {
+        const deviceVersion =
+            req.body?.application?.version ||
+            "0.0.0";
 
-            version:
-                deviceVersion,
 
-            url:
-                ""
+        res.json({
 
-        },
+            server_time: {
 
-        websocket: {
+                timestamp:
+                    Date.now(),
 
-            url:
-                WEBSOCKET_URL,
+                timezone_offset:
+                    -180
 
-            token:
-                XIAOZHI_TOKEN
+            },
 
-        }
+            firmware: {
 
-    });
+                version:
+                    deviceVersion,
 
-});
+                url:
+                    ""
 
-/* ==============================
-   HTTP
-================================ */
+            },
+
+            websocket: {
+
+                url:
+                    WEBSOCKET_URL,
+
+                token:
+                    XIAOZHI_TOKEN
+
+            }
+
+        });
+
+    }
+);
+
+
+/* =========================================================
+   HTTP SERVER
+========================================================= */
 
 const server =
-    http.createServer(app);
+    http.createServer(
+        app
+    );
 
-/* ==============================
-   WEBSOCKET
-================================ */
+
+/* =========================================================
+   WEBSOCKET SERVER
+========================================================= */
 
 const wss =
     new WebSocketServer({
         server
     });
+
 
 wss.on(
     "connection",
@@ -464,6 +852,7 @@ wss.on(
 
         const requestUrl =
             req.url || "/";
+
 
         console.log(
             "================================="
@@ -500,18 +889,21 @@ wss.on(
 
         console.log(
             "Authorization:",
+
             req.headers["authorization"]
                 ? "recebido"
                 : "ausente"
+
         );
 
         console.log(
             "================================="
         );
 
-        /* ==========================
+
+        /* =================================================
            AUTENTICAÇÃO
-        ========================== */
+        ================================================= */
 
         const authorization =
             req.headers["authorization"] ||
@@ -519,6 +911,7 @@ wss.on(
 
         const expected =
             `Bearer ${XIAOZHI_TOKEN}`;
+
 
         if (
             authorization !==
@@ -535,73 +928,102 @@ wss.on(
             );
 
             return;
+
         }
+
 
         console.log(
             "Token válido!"
         );
 
+
         const sessionId =
             randomUUID();
+
 
         console.log(
             "Session:",
             sessionId
         );
 
-        /* ==========================
-           OPUS
-        ========================== */
+
+        /* =================================================
+           DECODIFICADOR OPUS
+        ================================================= */
 
         const opusDecoder =
             new OpusScript(
+
                 16000,
+
                 1,
+
                 OpusScript.Application.AUDIO
+
             );
+
 
         console.log(
             "Decodificador Opus criado."
         );
 
-        /* ==========================
-           VAD
-        ========================== */
 
-        let audioFrameCounter = 0;
+        /* =================================================
+           VARIÁVEIS VAD
+        ================================================= */
 
-        let voiceFrameCounter = 0;
+        let audioFrameCounter =
+            0;
 
-        let silenceFrameCounter = 0;
+        let voiceFrameCounter =
+            0;
 
-        let speechDetected = false;
+        let silenceFrameCounter =
+            0;
 
-        let speechBuffer = [];
+        let speechDetected =
+            false;
 
-        let speechBytes = 0;
+        let speechBuffer =
+            [];
 
-        let processingSpeech = false;
+        let speechBytes =
+            0;
 
-        /* ==========================
+        let processingSpeech =
+            false;
+
+
+        /* =================================================
            INÍCIO DA FALA
-        ========================== */
+        ================================================= */
 
         function startSpeech() {
 
-            if (speechDetected)
+            if (
+                speechDetected
+            ) {
+
                 return;
+
+            }
+
 
             speechDetected =
                 true;
 
+
             silenceFrameCounter =
                 0;
+
 
             speechBuffer =
                 [];
 
+
             speechBytes =
                 0;
+
 
             console.log("");
 
@@ -616,19 +1038,28 @@ wss.on(
             console.log(
                 "================================="
             );
+
         }
 
-        /* ==========================
+
+        /* =================================================
            FIM DA FALA
-        ========================== */
+        ================================================= */
 
         async function finishSpeech() {
 
-            if (!speechDetected)
+            if (
+                !speechDetected
+            ) {
+
                 return;
+
+            }
+
 
             speechDetected =
                 false;
+
 
             console.log("");
 
@@ -652,61 +1083,91 @@ wss.on(
             );
 
             console.log(
+
                 "Duração aproximada:",
+
                 (
+
                     speechBuffer.length *
                     60 /
                     1000
+
                 ).toFixed(2),
+
                 "segundos"
+
             );
 
             console.log(
                 "================================="
             );
 
-            /*
-             * Faz uma cópia do áudio antes
-             * de limpar o buffer.
-             */
 
             const audioToTranscribe =
-                [...speechBuffer];
+                [
+                    ...speechBuffer
+                ];
+
 
             speechBuffer =
                 [];
 
+
             speechBytes =
                 0;
+
 
             silenceFrameCounter =
                 0;
 
+
             voiceFrameCounter =
                 0;
 
-            /*
-             * Evita duas transcrições
-             * simultâneas.
-             */
 
-            if (processingSpeech) {
+            if (
+                processingSpeech
+            ) {
 
                 console.log(
-                    "STT anterior ainda está processando."
+                    "STT/Gemini anterior ainda está processando."
                 );
 
                 return;
+
             }
+
 
             processingSpeech =
                 true;
 
+
             try {
 
-                await transcribeAudio(
-                    audioToTranscribe
-                );
+                /* =========================================
+                   STT
+                ========================================= */
+
+                const text =
+                    await transcribeAudio(
+                        audioToTranscribe
+                    );
+
+
+                /* =========================================
+                   GEMINI
+                ========================================= */
+
+                if (
+                    text
+                ) {
+
+                    await askGemini(
+                        text
+                    );
+
+                }
+
 
             } finally {
 
@@ -714,23 +1175,32 @@ wss.on(
                     false;
 
             }
+
         }
 
-        /* ==========================
-           MENSAGENS
-        ========================== */
+
+        /* =================================================
+           MENSAGENS WEBSOCKET
+        ================================================= */
 
         ws.on(
             "message",
-            async (data, isBinary) => {
+            async (
+                data,
+                isBinary
+            ) => {
 
-                /* ======================
-                   ÁUDIO
-                ====================== */
 
-                if (isBinary) {
+                /* =========================================
+                   ÁUDIO OPUS
+                ========================================= */
+
+                if (
+                    isBinary
+                ) {
 
                     audioFrameCounter++;
+
 
                     try {
 
@@ -739,14 +1209,17 @@ wss.on(
                                 data
                             );
 
+
                         let sumSquares =
                             0;
 
                         let peak =
                             0;
 
+
                         const samples =
                             pcm.length / 2;
+
 
                         for (
                             let i = 0;
@@ -759,10 +1232,12 @@ wss.on(
                                     i
                                 );
 
+
                             const absolute =
                                 Math.abs(
                                     sample
                                 );
+
 
                             if (
                                 absolute >
@@ -774,20 +1249,26 @@ wss.on(
 
                             }
 
+
                             sumSquares +=
                                 sample *
                                 sample;
+
                         }
+
 
                         const rms =
                             Math.sqrt(
+
                                 sumSquares /
                                 samples
+
                             );
 
-                        /* ==================
-                           VOZ
-                        ================== */
+
+                        /* =================================
+                           DETECÇÃO DE VOZ
+                        ================================= */
 
                         if (
                             rms >=
@@ -799,20 +1280,26 @@ wss.on(
                             silenceFrameCounter =
                                 0;
 
+
                             if (
+
                                 !speechDetected &&
+
                                 voiceFrameCounter >=
                                 VOICE_FRAMES_TO_START
+
                             ) {
 
                                 startSpeech();
 
                             }
 
+
                         } else {
 
                             voiceFrameCounter =
                                 0;
+
 
                             if (
                                 speechDetected
@@ -824,9 +1311,10 @@ wss.on(
 
                         }
 
-                        /* ==================
-                           ACUMULA ÁUDIO
-                        ================== */
+
+                        /* =================================
+                           ACUMULAR ÁUDIO
+                        ================================= */
 
                         if (
                             speechDetected
@@ -841,28 +1329,35 @@ wss.on(
 
                         }
 
-                        /* ==================
-                           FIM DA FALA
-                        ================== */
+
+                        /* =================================
+                           DETECTAR FIM DA FALA
+                        ================================= */
 
                         if (
+
                             speechDetected &&
+
                             silenceFrameCounter >=
                             SILENCE_FRAMES_TO_END
+
                         ) {
 
                             await finishSpeech();
 
                         }
 
-                        /* ==================
+
+                        /* =================================
                            LOG
-                        ================== */
+                        ================================= */
 
                         if (
+
                             audioFrameCounter %
                             10 ===
                             0
+
                         ) {
 
                             console.log(
@@ -877,6 +1372,7 @@ wss.on(
                                 peak,
 
                                 "| estado:",
+
                                 speechDetected
                                     ? "FALANDO"
                                     : "silêncio"
@@ -884,6 +1380,7 @@ wss.on(
                             );
 
                         }
+
 
                     } catch (error) {
 
@@ -897,12 +1394,15 @@ wss.on(
 
                     }
 
+
                     return;
+
                 }
 
-                /* ======================
+
+                /* =========================================
                    JSON
-                ====================== */
+                ========================================= */
 
                 try {
 
@@ -911,16 +1411,21 @@ wss.on(
                             data.toString()
                         );
 
+
                     console.log(
+
                         "JSON recebido:",
+
                         JSON.stringify(
                             message
                         )
+
                     );
 
-                    /* ==================
+
+                    /* =====================================
                        HELLO
-                    ================== */
+                    ===================================== */
 
                     if (
                         message.type ===
@@ -931,7 +1436,9 @@ wss.on(
                             "Hello recebido do Xiaozhi"
                         );
 
+
                         ws.send(
+
                             JSON.stringify({
 
                                 type:
@@ -960,18 +1467,23 @@ wss.on(
                                 }
 
                             })
+
                         );
+
 
                         console.log(
                             "Hello enviado."
                         );
 
+
                         return;
+
                     }
 
-                    /* ==================
+
+                    /* =====================================
                        LISTEN
-                    ================== */
+                    ===================================== */
 
                     if (
                         message.type ===
@@ -989,12 +1501,15 @@ wss.on(
 
                         );
 
+
                         return;
+
                     }
 
-                    /* ==================
+
+                    /* =====================================
                        ABORT
-                    ================== */
+                    ===================================== */
 
                     if (
                         message.type ===
@@ -1010,12 +1525,15 @@ wss.on(
 
                         );
 
+
                         return;
+
                     }
 
-                    /* ==================
+
+                    /* =====================================
                        MCP
-                    ================== */
+                    ===================================== */
 
                     if (
                         message.type ===
@@ -1026,8 +1544,11 @@ wss.on(
                             "MCP recebido."
                         );
 
+
                         return;
+
                     }
+
 
                 } catch (error) {
 
@@ -1044,9 +1565,10 @@ wss.on(
             }
         );
 
-        /* ==========================
-           CLOSE
-        ========================== */
+
+        /* =================================================
+           CLIENTE DESCONECTADO
+        ================================================= */
 
         ws.on(
             "close",
@@ -1059,6 +1581,7 @@ wss.on(
                     sessionId
 
                 );
+
 
                 try {
 
@@ -1079,17 +1602,21 @@ wss.on(
             }
         );
 
-        /* ==========================
-           ERROR
-        ========================== */
+
+        /* =================================================
+           ERRO WEBSOCKET
+        ================================================= */
 
         ws.on(
             "error",
             (error) => {
 
                 console.error(
+
                     "Erro WebSocket:",
+
                     error
+
                 );
 
             }
@@ -1098,9 +1625,10 @@ wss.on(
     }
 );
 
-/* ==============================
-   START
-================================ */
+
+/* =========================================================
+   INICIAR SERVIDOR
+========================================================= */
 
 server.listen(
     PORT,
@@ -1108,7 +1636,9 @@ server.listen(
     () => {
 
         console.log(
+
             `Servidor rodando na porta ${PORT}`
+
         );
 
         console.log(
@@ -1124,7 +1654,11 @@ server.listen(
         );
 
         console.log(
-            "STT: Gemini 3.5 Flash-Lite"
+            "STT: OK"
+        );
+
+        console.log(
+            "Gemini: OK"
         );
 
     }
