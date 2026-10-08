@@ -19,49 +19,35 @@ const XIAOZHI_TOKEN =
 const WEBSOCKET_URL =
     "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
-
-/* =========================================================
+/* ==============================
    CONFIGURAÇÃO DO VAD
-   ========================================================= */
+================================ */
 
-// RMS mínimo para considerar que existe voz
 const VOICE_THRESHOLD = 1800;
-
-// Quantos frames silenciosos consecutivos encerram a fala
-// 15 frames × 60 ms = aproximadamente 900 ms
 const SILENCE_FRAMES_TO_END = 15;
-
-// Quantos frames precisamos detectar como voz para iniciar
 const VOICE_FRAMES_TO_START = 2;
 
-
-/* =========================================================
-   PÁGINA PRINCIPAL
-   ========================================================= */
+/* ==============================
+   ROOT
+================================ */
 
 app.get("/", (req, res) => {
     res.send("Xiaozhi Gemini Server funcionando!");
 });
 
-
-/* =========================================================
-   GEMINI
-   ========================================================= */
+/* ==============================
+   GEMINI - CHAT
+================================ */
 
 app.post("/chat", async (req, res) => {
-
     try {
-
         const message = req.body.message;
 
         if (!message) {
-
             return res.status(400).json({
                 error: "Mensagem não informada"
             });
-
         }
-
 
         const response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
@@ -74,7 +60,6 @@ app.post("/chat", async (req, res) => {
                 },
 
                 body: JSON.stringify({
-
                     contents: [
                         {
                             parts: [
@@ -93,38 +78,28 @@ app.post("/chat", async (req, res) => {
                             }
                         ]
                     }
-
                 })
             }
         );
 
-
         const data = await response.json();
 
-
         if (!response.ok) {
-
             console.error(
                 "Erro Gemini:",
                 JSON.stringify(data)
             );
 
-            return res
-                .status(response.status)
-                .json(data);
-
+            return res.status(response.status).json(data);
         }
-
 
         const text =
             data.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Não consegui gerar uma resposta.";
 
-
         res.json({
             response: text
         });
-
 
     } catch (error) {
 
@@ -136,15 +111,248 @@ app.post("/chat", async (req, res) => {
         res.status(500).json({
             error: error.message
         });
-
     }
-
 });
 
+/* ==============================
+   CONVERTE PCM PARA WAV
+================================ */
 
-/* =========================================================
+function pcmToWav(pcmBuffers) {
+
+    const pcm = Buffer.concat(pcmBuffers);
+
+    const sampleRate = 16000;
+    const channels = 1;
+    const bitsPerSample = 16;
+
+    const byteRate =
+        sampleRate *
+        channels *
+        bitsPerSample /
+        8;
+
+    const blockAlign =
+        channels *
+        bitsPerSample /
+        8;
+
+    const wav = Buffer.alloc(44 + pcm.length);
+
+    /* RIFF */
+
+    wav.write("RIFF", 0);
+
+    wav.writeUInt32LE(
+        36 + pcm.length,
+        4
+    );
+
+    wav.write("WAVE", 8);
+
+    /* fmt */
+
+    wav.write("fmt ", 12);
+
+    wav.writeUInt32LE(
+        16,
+        16
+    );
+
+    wav.writeUInt16LE(
+        1,
+        20
+    );
+
+    wav.writeUInt16LE(
+        channels,
+        22
+    );
+
+    wav.writeUInt32LE(
+        sampleRate,
+        24
+    );
+
+    wav.writeUInt32LE(
+        byteRate,
+        28
+    );
+
+    wav.writeUInt16LE(
+        blockAlign,
+        32
+    );
+
+    wav.writeUInt16LE(
+        bitsPerSample,
+        34
+    );
+
+    /* data */
+
+    wav.write("data", 36);
+
+    wav.writeUInt32LE(
+        pcm.length,
+        40
+    );
+
+    pcm.copy(
+        wav,
+        44
+    );
+
+    return wav;
+}
+
+/* ==============================
+   STT
+================================ */
+
+async function transcribeAudio(pcmBuffers) {
+
+    try {
+
+        if (!pcmBuffers || pcmBuffers.length === 0) {
+
+            console.log(
+                "STT: nenhum áudio para transcrever."
+            );
+
+            return null;
+        }
+
+        const wav = pcmToWav(
+            pcmBuffers
+        );
+
+        console.log("");
+        console.log(
+            "================================="
+        );
+        console.log(
+            "📝 ENVIANDO ÁUDIO PARA STT"
+        );
+        console.log(
+            "WAV:",
+            wav.length,
+            "bytes"
+        );
+        console.log(
+            "================================="
+        );
+
+        const audioBase64 =
+            wav.toString("base64");
+
+        const response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key":
+                        process.env.GEMINI_API_KEY
+                },
+
+                body: JSON.stringify({
+
+                    contents: [
+                        {
+                            parts: [
+
+                                {
+                                    inlineData: {
+                                        mimeType:
+                                            "audio/wav",
+                                        data:
+                                            audioBase64
+                                    }
+                                },
+
+                                {
+                                    text:
+                                        "Transcreva exatamente o que foi falado neste áudio. O áudio está em português do Brasil. Retorne somente a transcrição, sem explicações, sem comentários e sem responder à pergunta."
+                                }
+
+                            ]
+                        }
+                    ],
+
+                    generationConfig: {
+                        temperature: 0
+                    }
+
+                })
+            }
+        );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+
+            console.error(
+                "❌ Erro no STT:",
+                JSON.stringify(data)
+            );
+
+            return null;
+        }
+
+        const text =
+            data.candidates?.[0]?.content?.parts
+                ?.map(part => part.text || "")
+                .join("")
+                .trim();
+
+        if (!text) {
+
+            console.log(
+                "⚠️ STT não retornou texto."
+            );
+
+            console.log(
+                "Resposta:",
+                JSON.stringify(data)
+            );
+
+            return null;
+        }
+
+        console.log("");
+        console.log(
+            "================================="
+        );
+        console.log(
+            "📝 STT RESULTADO:"
+        );
+        console.log(
+            text
+        );
+        console.log(
+            "================================="
+        );
+        console.log("");
+
+        return text;
+
+    } catch (error) {
+
+        console.error(
+            "❌ Erro ao executar STT:",
+            error
+        );
+
+        return null;
+    }
+}
+
+/* ==============================
    OTA
-   ========================================================= */
+================================ */
 
 app.get("/xiaozhi/ota/", (req, res) => {
 
@@ -154,18 +362,23 @@ app.get("/xiaozhi/ota/", (req, res) => {
             "Xiaozhi OTA funcionando!",
 
         websocket: {
-            url: WEBSOCKET_URL
+            url:
+                WEBSOCKET_URL
         }
 
     });
 
 });
 
-
 app.post("/xiaozhi/ota/", (req, res) => {
 
-    console.log("=================================");
-    console.log("OTA REQUEST RECEBIDO");
+    console.log(
+        "================================="
+    );
+
+    console.log(
+        "OTA REQUEST RECEBIDO"
+    );
 
     console.log(
         "Device-ID:",
@@ -182,39 +395,43 @@ app.post("/xiaozhi/ota/", (req, res) => {
         req.headers["user-agent"]
     );
 
-    console.log("=================================");
-
+    console.log(
+        "================================="
+    );
 
     const deviceVersion =
         req.body?.application?.version ||
         "0.0.0";
 
-
     res.json({
 
         server_time: {
 
-            timestamp: Date.now(),
+            timestamp:
+                Date.now(),
 
-            timezone_offset: -180
+            timezone_offset:
+                -180
 
         },
-
 
         firmware: {
 
-            version: deviceVersion,
+            version:
+                deviceVersion,
 
-            url: ""
+            url:
+                ""
 
         },
 
-
         websocket: {
 
-            url: WEBSOCKET_URL,
+            url:
+                WEBSOCKET_URL,
 
-            token: XIAOZHI_TOKEN
+            token:
+                XIAOZHI_TOKEN
 
         }
 
@@ -222,639 +439,668 @@ app.post("/xiaozhi/ota/", (req, res) => {
 
 });
 
-
-/* =========================================================
-   SERVIDOR HTTP
-   ========================================================= */
+/* ==============================
+   HTTP
+================================ */
 
 const server =
     http.createServer(app);
 
-
-/* =========================================================
+/* ==============================
    WEBSOCKET
-   ========================================================= */
+================================ */
 
 const wss =
     new WebSocketServer({
         server
     });
 
+wss.on(
+    "connection",
+    (ws, req) => {
 
-wss.on("connection", (ws, req) => {
+        const clientIp =
+            req.socket.remoteAddress;
 
-
-    const clientIp =
-        req.socket.remoteAddress;
-
-
-    const requestUrl =
-        req.url || "/";
-
-
-    console.log("=================================");
-    console.log("NOVO CLIENTE WEBSOCKET");
-
-
-    console.log(
-        "URL:",
-        requestUrl
-    );
-
-
-    console.log(
-        "IP:",
-        clientIp
-    );
-
-
-    console.log(
-        "Device-ID:",
-        req.headers["device-id"]
-    );
-
-
-    console.log(
-        "Client-ID:",
-        req.headers["client-id"]
-    );
-
-
-    console.log(
-        "Protocol-Version:",
-        req.headers["protocol-version"]
-    );
-
-
-    console.log(
-        "Authorization:",
-        req.headers["authorization"]
-            ? "recebido"
-            : "ausente"
-    );
-
-
-    console.log("=================================");
-
-
-    /* =====================================================
-       VERIFICA TOKEN
-       ===================================================== */
-
-    const authorization =
-        req.headers["authorization"] || "";
-
-
-    const expected =
-        `Bearer ${XIAOZHI_TOKEN}`;
-
-
-    if (authorization !== expected) {
+        const requestUrl =
+            req.url || "/";
 
         console.log(
-            "Token inválido."
+            "================================="
         );
 
-
-        ws.close(
-            1008,
-            "Unauthorized"
+        console.log(
+            "NOVO CLIENTE WEBSOCKET"
         );
 
-
-        return;
-
-    }
-
-
-    console.log(
-        "Token válido!"
-    );
-
-
-    /* =====================================================
-       SESSÃO
-       ===================================================== */
-
-    const sessionId =
-        randomUUID();
-
-
-    console.log(
-        "Session:",
-        sessionId
-    );
-
-
-    /* =====================================================
-       DECODIFICADOR OPUS
-       ===================================================== */
-
-    const opusDecoder =
-        new OpusScript(
-            16000,
-            1,
-            OpusScript.Application.AUDIO
+        console.log(
+            "URL:",
+            requestUrl
         );
 
+        console.log(
+            "IP:",
+            clientIp
+        );
 
-    console.log(
-        "Decodificador Opus criado."
-    );
+        console.log(
+            "Device-ID:",
+            req.headers["device-id"]
+        );
 
+        console.log(
+            "Client-ID:",
+            req.headers["client-id"]
+        );
 
-    /* =====================================================
-       VARIÁVEIS DO VAD
-       ===================================================== */
+        console.log(
+            "Protocol-Version:",
+            req.headers["protocol-version"]
+        );
 
-    let audioFrameCounter = 0;
+        console.log(
+            "Authorization:",
+            req.headers["authorization"]
+                ? "recebido"
+                : "ausente"
+        );
 
-    let voiceFrameCounter = 0;
+        console.log(
+            "================================="
+        );
 
-    let silenceFrameCounter = 0;
+        /* ==========================
+           AUTENTICAÇÃO
+        ========================== */
 
-    let speechDetected = false;
+        const authorization =
+            req.headers["authorization"] ||
+            "";
 
-    let speechBuffer = [];
+        const expected =
+            `Bearer ${XIAOZHI_TOKEN}`;
 
-    let speechBytes = 0;
+        if (
+            authorization !==
+            expected
+        ) {
 
+            console.log(
+                "Token inválido."
+            );
 
-    /* =====================================================
-       FUNÇÃO: INICIAR FALA
-       ===================================================== */
+            ws.close(
+                1008,
+                "Unauthorized"
+            );
 
-    function startSpeech() {
-
-        if (speechDetected) {
             return;
         }
 
+        console.log(
+            "Token válido!"
+        );
 
-        speechDetected = true;
+        const sessionId =
+            randomUUID();
 
-        silenceFrameCounter = 0;
+        console.log(
+            "Session:",
+            sessionId
+        );
 
-        speechBuffer = [];
+        /* ==========================
+           OPUS
+        ========================== */
 
-        speechBytes = 0;
+        const opusDecoder =
+            new OpusScript(
+                16000,
+                1,
+                OpusScript.Application.AUDIO
+            );
 
+        console.log(
+            "Decodificador Opus criado."
+        );
 
-        console.log("");
-        console.log("=================================");
-        console.log("🎤 VOZ DETECTADA");
-        console.log("=================================");
+        /* ==========================
+           VAD
+        ========================== */
 
-    }
+        let audioFrameCounter = 0;
 
+        let voiceFrameCounter = 0;
 
-    /* =====================================================
-       FUNÇÃO: FINALIZAR FALA
-       ===================================================== */
+        let silenceFrameCounter = 0;
 
-    function finishSpeech() {
+        let speechDetected = false;
 
-        if (!speechDetected) {
-            return;
+        let speechBuffer = [];
+
+        let speechBytes = 0;
+
+        let processingSpeech = false;
+
+        /* ==========================
+           INÍCIO DA FALA
+        ========================== */
+
+        function startSpeech() {
+
+            if (speechDetected)
+                return;
+
+            speechDetected =
+                true;
+
+            silenceFrameCounter =
+                0;
+
+            speechBuffer =
+                [];
+
+            speechBytes =
+                0;
+
+            console.log("");
+
+            console.log(
+                "================================="
+            );
+
+            console.log(
+                "🎤 VOZ DETECTADA"
+            );
+
+            console.log(
+                "================================="
+            );
         }
 
+        /* ==========================
+           FIM DA FALA
+        ========================== */
 
-        speechDetected = false;
+        async function finishSpeech() {
 
-        console.log("");
-        console.log("=================================");
-        console.log("🔇 FIM DA FALA");
-        console.log(
-            "Frames de áudio:",
-            speechBuffer.length
-        );
+            if (!speechDetected)
+                return;
 
-        console.log(
-            "PCM acumulado:",
-            speechBytes,
-            "bytes"
-        );
+            speechDetected =
+                false;
 
-        console.log(
-            "Duração aproximada:",
-            (
-                speechBuffer.length * 60 / 1000
-            ).toFixed(2),
-            "segundos"
-        );
+            console.log("");
 
-        console.log("=================================");
-        console.log("");
+            console.log(
+                "================================="
+            );
 
+            console.log(
+                "🔇 FIM DA FALA"
+            );
 
-        /*
-         * Por enquanto não enviamos o áudio
-         * para o STT.
-         *
-         * Primeiro queremos confirmar
-         * que o VAD está funcionando.
-         */
+            console.log(
+                "Frames de áudio:",
+                speechBuffer.length
+            );
 
+            console.log(
+                "PCM acumulado:",
+                speechBytes,
+                "bytes"
+            );
 
-        speechBuffer = [];
+            console.log(
+                "Duração aproximada:",
+                (
+                    speechBuffer.length *
+                    60 /
+                    1000
+                ).toFixed(2),
+                "segundos"
+            );
 
-        speechBytes = 0;
+            console.log(
+                "================================="
+            );
 
-        silenceFrameCounter = 0;
+            /*
+             * Faz uma cópia do áudio antes
+             * de limpar o buffer.
+             */
 
-    }
+            const audioToTranscribe =
+                [...speechBuffer];
 
+            speechBuffer =
+                [];
 
-    /* =====================================================
-       RECEBE MENSAGENS
-       ===================================================== */
+            speechBytes =
+                0;
 
-    ws.on(
-        "message",
-        async (data, isBinary) => {
+            silenceFrameCounter =
+                0;
 
+            voiceFrameCounter =
+                0;
 
-            /* =============================================
-               ÁUDIO OPUS
-               ============================================= */
+            /*
+             * Evita duas transcrições
+             * simultâneas.
+             */
 
-            if (isBinary) {
+            if (processingSpeech) {
 
-                audioFrameCounter++;
+                console.log(
+                    "STT anterior ainda está processando."
+                );
 
+                return;
+            }
+
+            processingSpeech =
+                true;
+
+            try {
+
+                await transcribeAudio(
+                    audioToTranscribe
+                );
+
+            } finally {
+
+                processingSpeech =
+                    false;
+
+            }
+        }
+
+        /* ==========================
+           MENSAGENS
+        ========================== */
+
+        ws.on(
+            "message",
+            async (data, isBinary) => {
+
+                /* ======================
+                   ÁUDIO
+                ====================== */
+
+                if (isBinary) {
+
+                    audioFrameCounter++;
+
+                    try {
+
+                        const pcm =
+                            opusDecoder.decode(
+                                data
+                            );
+
+                        let sumSquares =
+                            0;
+
+                        let peak =
+                            0;
+
+                        const samples =
+                            pcm.length / 2;
+
+                        for (
+                            let i = 0;
+                            i < pcm.length;
+                            i += 2
+                        ) {
+
+                            const sample =
+                                pcm.readInt16LE(
+                                    i
+                                );
+
+                            const absolute =
+                                Math.abs(
+                                    sample
+                                );
+
+                            if (
+                                absolute >
+                                peak
+                            ) {
+
+                                peak =
+                                    absolute;
+
+                            }
+
+                            sumSquares +=
+                                sample *
+                                sample;
+                        }
+
+                        const rms =
+                            Math.sqrt(
+                                sumSquares /
+                                samples
+                            );
+
+                        /* ==================
+                           VOZ
+                        ================== */
+
+                        if (
+                            rms >=
+                            VOICE_THRESHOLD
+                        ) {
+
+                            voiceFrameCounter++;
+
+                            silenceFrameCounter =
+                                0;
+
+                            if (
+                                !speechDetected &&
+                                voiceFrameCounter >=
+                                VOICE_FRAMES_TO_START
+                            ) {
+
+                                startSpeech();
+
+                            }
+
+                        } else {
+
+                            voiceFrameCounter =
+                                0;
+
+                            if (
+                                speechDetected
+                            ) {
+
+                                silenceFrameCounter++;
+
+                            }
+
+                        }
+
+                        /* ==================
+                           ACUMULA ÁUDIO
+                        ================== */
+
+                        if (
+                            speechDetected
+                        ) {
+
+                            speechBuffer.push(
+                                pcm
+                            );
+
+                            speechBytes +=
+                                pcm.length;
+
+                        }
+
+                        /* ==================
+                           FIM DA FALA
+                        ================== */
+
+                        if (
+                            speechDetected &&
+                            silenceFrameCounter >=
+                            SILENCE_FRAMES_TO_END
+                        ) {
+
+                            await finishSpeech();
+
+                        }
+
+                        /* ==================
+                           LOG
+                        ================== */
+
+                        if (
+                            audioFrameCounter %
+                            10 ===
+                            0
+                        ) {
+
+                            console.log(
+
+                                "ÁUDIO | frame:",
+                                audioFrameCounter,
+
+                                "| RMS:",
+                                rms.toFixed(0),
+
+                                "| Pico:",
+                                peak,
+
+                                "| estado:",
+                                speechDetected
+                                    ? "FALANDO"
+                                    : "silêncio"
+
+                            );
+
+                        }
+
+                    } catch (error) {
+
+                        console.error(
+
+                            "Erro ao processar áudio:",
+
+                            error.message
+
+                        );
+
+                    }
+
+                    return;
+                }
+
+                /* ======================
+                   JSON
+                ====================== */
 
                 try {
 
-                    /* -------------------------------------
-                       DECODIFICA OPUS → PCM
-                       ------------------------------------- */
-
-                    const pcm =
-                        opusDecoder.decode(data);
-
-
-                    /* -------------------------------------
-                       CALCULA RMS
-                       ------------------------------------- */
-
-                    let sumSquares = 0;
-
-                    let peak = 0;
-
-                    const samples =
-                        pcm.length / 2;
-
-
-                    for (
-                        let i = 0;
-                        i < pcm.length;
-                        i += 2
-                    ) {
-
-                        const sample =
-                            pcm.readInt16LE(i);
-
-
-                        const absolute =
-                            Math.abs(sample);
-
-
-                        if (
-                            absolute > peak
-                        ) {
-
-                            peak =
-                                absolute;
-
-                        }
-
-
-                        sumSquares +=
-                            sample * sample;
-
-                    }
-
-
-                    const rms =
-                        Math.sqrt(
-                            sumSquares /
-                            samples
+                    const message =
+                        JSON.parse(
+                            data.toString()
                         );
 
+                    console.log(
+                        "JSON recebido:",
+                        JSON.stringify(
+                            message
+                        )
+                    );
 
-                    /* -------------------------------------
-                       VAD
-                       ------------------------------------- */
-
-                    if (
-                        rms >=
-                        VOICE_THRESHOLD
-                    ) {
-
-                        voiceFrameCounter++;
-
-                        silenceFrameCounter = 0;
-
-
-                        /*
-                         * Dois frames de voz
-                         * para confirmar início.
-                         */
-
-                        if (
-                            !speechDetected &&
-                            voiceFrameCounter >=
-                            VOICE_FRAMES_TO_START
-                        ) {
-
-                            startSpeech();
-
-                        }
-
-
-                    } else {
-
-                        voiceFrameCounter = 0;
-
-
-                        if (
-                            speechDetected
-                        ) {
-
-                            silenceFrameCounter++;
-
-                        }
-
-                    }
-
-
-                    /* -------------------------------------
-                       GUARDA PCM DURANTE A FALA
-                       ------------------------------------- */
+                    /* ==================
+                       HELLO
+                    ================== */
 
                     if (
-                        speechDetected
-                    ) {
-
-                        speechBuffer.push(
-                            pcm
-                        );
-
-                        speechBytes +=
-                            pcm.length;
-
-                    }
-
-
-                    /* -------------------------------------
-                       FIM DA FALA
-                       ------------------------------------- */
-
-                    if (
-                        speechDetected &&
-                        silenceFrameCounter >=
-                        SILENCE_FRAMES_TO_END
-                    ) {
-
-                        finishSpeech();
-
-                    }
-
-
-                    /* -------------------------------------
-                       LOG
-                       ------------------------------------- */
-
-                    if (
-                        audioFrameCounter % 10 === 0
+                        message.type ===
+                        "hello"
                     ) {
 
                         console.log(
-                            "ÁUDIO | frame:",
-                            audioFrameCounter,
-                            "| RMS:",
-                            rms.toFixed(0),
-                            "| Pico:",
-                            peak,
-                            "| estado:",
-                            speechDetected
-                                ? "FALANDO"
-                                : "silêncio"
+                            "Hello recebido do Xiaozhi"
                         );
 
+                        ws.send(
+                            JSON.stringify({
+
+                                type:
+                                    "hello",
+
+                                transport:
+                                    "websocket",
+
+                                session_id:
+                                    sessionId,
+
+                                audio_params: {
+
+                                    format:
+                                        "opus",
+
+                                    sample_rate:
+                                        16000,
+
+                                    channels:
+                                        1,
+
+                                    frame_duration:
+                                        60
+
+                                }
+
+                            })
+                        );
+
+                        console.log(
+                            "Hello enviado."
+                        );
+
+                        return;
                     }
 
+                    /* ==================
+                       LISTEN
+                    ================== */
+
+                    if (
+                        message.type ===
+                        "listen"
+                    ) {
+
+                        console.log(
+
+                            "Listen:",
+
+                            message.state,
+
+                            message.mode ||
+                                ""
+
+                        );
+
+                        return;
+                    }
+
+                    /* ==================
+                       ABORT
+                    ================== */
+
+                    if (
+                        message.type ===
+                        "abort"
+                    ) {
+
+                        console.log(
+
+                            "Abort:",
+
+                            message.reason ||
+                                ""
+
+                        );
+
+                        return;
+                    }
+
+                    /* ==================
+                       MCP
+                    ================== */
+
+                    if (
+                        message.type ===
+                        "mcp"
+                    ) {
+
+                        console.log(
+                            "MCP recebido."
+                        );
+
+                        return;
+                    }
 
                 } catch (error) {
 
                     console.error(
-                        "Erro ao processar áudio:",
-                        error.message
+
+                        "Erro ao processar JSON:",
+
+                        error
+
                     );
 
                 }
-
-
-                return;
 
             }
+        );
 
+        /* ==========================
+           CLOSE
+        ========================== */
 
-            /* =============================================
-               JSON
-               ============================================= */
-
-            try {
-
-                const message =
-                    JSON.parse(
-                        data.toString()
-                    );
-
+        ws.on(
+            "close",
+            () => {
 
                 console.log(
-                    "JSON recebido:",
-                    JSON.stringify(message)
+
+                    "Cliente desconectado:",
+
+                    sessionId
+
                 );
 
+                try {
 
-                /* =========================================
-                   HELLO
-                   ========================================= */
+                    opusDecoder.delete();
 
-                if (
-                    message.type === "hello"
-                ) {
+                } catch (error) {
 
-                    console.log(
-                        "Hello recebido do Xiaozhi"
+                    console.error(
+
+                        "Erro ao liberar decoder:",
+
+                        error.message
+
                     );
-
-
-                    ws.send(
-                        JSON.stringify({
-
-                            type: "hello",
-
-                            transport:
-                                "websocket",
-
-                            session_id:
-                                sessionId,
-
-                            audio_params: {
-
-                                format:
-                                    "opus",
-
-                                sample_rate:
-                                    16000,
-
-                                channels:
-                                    1,
-
-                                frame_duration:
-                                    60
-
-                            }
-
-                        })
-                    );
-
-
-                    console.log(
-                        "Hello enviado."
-                    );
-
-
-                    return;
 
                 }
 
+            }
+        );
 
-                /* =========================================
-                   LISTEN
-                   ========================================= */
+        /* ==========================
+           ERROR
+        ========================== */
 
-                if (
-                    message.type === "listen"
-                ) {
-
-                    console.log(
-                        "Listen:",
-                        message.state,
-                        message.mode || ""
-                    );
-
-
-                    return;
-
-                }
-
-
-                /* =========================================
-                   ABORT
-                   ========================================= */
-
-                if (
-                    message.type === "abort"
-                ) {
-
-                    console.log(
-                        "Abort:",
-                        message.reason || ""
-                    );
-
-
-                    return;
-
-                }
-
-
-                /* =========================================
-                   MCP
-                   ========================================= */
-
-                if (
-                    message.type === "mcp"
-                ) {
-
-                    console.log(
-                        "MCP recebido."
-                    );
-
-
-                    return;
-
-                }
-
-
-            } catch (error) {
+        ws.on(
+            "error",
+            (error) => {
 
                 console.error(
-                    "Erro ao processar JSON:",
+                    "Erro WebSocket:",
                     error
                 );
 
             }
+        );
 
-        }
-    );
+    }
+);
 
-
-    /* =====================================================
-       DESCONECTOU
-       ===================================================== */
-
-    ws.on(
-        "close",
-        () => {
-
-            console.log(
-                "Cliente desconectado:",
-                sessionId
-            );
-
-
-            try {
-
-                opusDecoder.delete();
-
-            } catch (error) {
-
-                console.error(
-                    "Erro ao liberar decoder:",
-                    error.message
-                );
-
-            }
-
-        }
-    );
-
-
-    /* =====================================================
-       ERRO WEBSOCKET
-       ===================================================== */
-
-    ws.on(
-        "error",
-        (error) => {
-
-            console.error(
-                "Erro WebSocket:",
-                error
-            );
-
-        }
-    );
-
-});
-
-
-/* =========================================================
-   INICIA SERVIDOR
-   ========================================================= */
+/* ==============================
+   START
+================================ */
 
 server.listen(
     PORT,
@@ -875,6 +1121,10 @@ server.listen(
 
         console.log(
             "OTA: OK"
+        );
+
+        console.log(
+            "STT: Gemini 3.5 Flash-Lite"
         );
 
     }
