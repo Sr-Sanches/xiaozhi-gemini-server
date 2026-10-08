@@ -21,6 +21,21 @@ const WEBSOCKET_URL =
 
 
 /* =========================================================
+   CONFIGURAÇÃO DO VAD
+   ========================================================= */
+
+// RMS mínimo para considerar que existe voz
+const VOICE_THRESHOLD = 1800;
+
+// Quantos frames silenciosos consecutivos encerram a fala
+// 15 frames × 60 ms = aproximadamente 900 ms
+const SILENCE_FRAMES_TO_END = 15;
+
+// Quantos frames precisamos detectar como voz para iniciar
+const VOICE_FRAMES_TO_START = 2;
+
+
+/* =========================================================
    PÁGINA PRINCIPAL
    ========================================================= */
 
@@ -40,10 +55,13 @@ app.post("/chat", async (req, res) => {
         const message = req.body.message;
 
         if (!message) {
+
             return res.status(400).json({
                 error: "Mensagem não informada"
             });
+
         }
+
 
         const response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
@@ -80,7 +98,9 @@ app.post("/chat", async (req, res) => {
             }
         );
 
+
         const data = await response.json();
+
 
         if (!response.ok) {
 
@@ -92,15 +112,19 @@ app.post("/chat", async (req, res) => {
             return res
                 .status(response.status)
                 .json(data);
+
         }
+
 
         const text =
             data.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Não consegui gerar uma resposta.";
 
+
         res.json({
             response: text
         });
+
 
     } catch (error) {
 
@@ -112,7 +136,9 @@ app.post("/chat", async (req, res) => {
         res.status(500).json({
             error: error.message
         });
+
     }
+
 });
 
 
@@ -132,6 +158,7 @@ app.get("/xiaozhi/ota/", (req, res) => {
         }
 
     });
+
 });
 
 
@@ -228,30 +255,36 @@ wss.on("connection", (ws, req) => {
     console.log("=================================");
     console.log("NOVO CLIENTE WEBSOCKET");
 
+
     console.log(
         "URL:",
         requestUrl
     );
+
 
     console.log(
         "IP:",
         clientIp
     );
 
+
     console.log(
         "Device-ID:",
         req.headers["device-id"]
     );
+
 
     console.log(
         "Client-ID:",
         req.headers["client-id"]
     );
 
+
     console.log(
         "Protocol-Version:",
         req.headers["protocol-version"]
     );
+
 
     console.log(
         "Authorization:",
@@ -259,6 +292,7 @@ wss.on("connection", (ws, req) => {
             ? "recebido"
             : "ausente"
     );
+
 
     console.log("=================================");
 
@@ -281,12 +315,15 @@ wss.on("connection", (ws, req) => {
             "Token inválido."
         );
 
+
         ws.close(
             1008,
             "Unauthorized"
         );
 
+
         return;
+
     }
 
 
@@ -327,10 +364,105 @@ wss.on("connection", (ws, req) => {
 
 
     /* =====================================================
-       CONTADOR DE ÁUDIO
+       VARIÁVEIS DO VAD
        ===================================================== */
 
     let audioFrameCounter = 0;
+
+    let voiceFrameCounter = 0;
+
+    let silenceFrameCounter = 0;
+
+    let speechDetected = false;
+
+    let speechBuffer = [];
+
+    let speechBytes = 0;
+
+
+    /* =====================================================
+       FUNÇÃO: INICIAR FALA
+       ===================================================== */
+
+    function startSpeech() {
+
+        if (speechDetected) {
+            return;
+        }
+
+
+        speechDetected = true;
+
+        silenceFrameCounter = 0;
+
+        speechBuffer = [];
+
+        speechBytes = 0;
+
+
+        console.log("");
+        console.log("=================================");
+        console.log("🎤 VOZ DETECTADA");
+        console.log("=================================");
+
+    }
+
+
+    /* =====================================================
+       FUNÇÃO: FINALIZAR FALA
+       ===================================================== */
+
+    function finishSpeech() {
+
+        if (!speechDetected) {
+            return;
+        }
+
+
+        speechDetected = false;
+
+        console.log("");
+        console.log("=================================");
+        console.log("🔇 FIM DA FALA");
+        console.log(
+            "Frames de áudio:",
+            speechBuffer.length
+        );
+
+        console.log(
+            "PCM acumulado:",
+            speechBytes,
+            "bytes"
+        );
+
+        console.log(
+            "Duração aproximada:",
+            (
+                speechBuffer.length * 60 / 1000
+            ).toFixed(2),
+            "segundos"
+        );
+
+        console.log("=================================");
+        console.log("");
+
+
+        /*
+         * Por enquanto não enviamos o áudio
+         * para o STT.
+         *
+         * Primeiro queremos confirmar
+         * que o VAD está funcionando.
+         */
+
+
+        speechBuffer = [];
+
+        speechBytes = 0;
+
+        silenceFrameCounter = 0;
+
+    }
 
 
     /* =====================================================
@@ -362,7 +494,7 @@ wss.on("connection", (ws, req) => {
 
 
                     /* -------------------------------------
-                       CALCULA RMS E PICO
+                       CALCULA RMS
                        ------------------------------------- */
 
                     let sumSquares = 0;
@@ -393,11 +525,13 @@ wss.on("connection", (ws, req) => {
 
                             peak =
                                 absolute;
+
                         }
 
 
                         sumSquares +=
                             sample * sample;
+
                     }
 
 
@@ -409,7 +543,86 @@ wss.on("connection", (ws, req) => {
 
 
                     /* -------------------------------------
-                       MOSTRA A CADA 10 FRAMES
+                       VAD
+                       ------------------------------------- */
+
+                    if (
+                        rms >=
+                        VOICE_THRESHOLD
+                    ) {
+
+                        voiceFrameCounter++;
+
+                        silenceFrameCounter = 0;
+
+
+                        /*
+                         * Dois frames de voz
+                         * para confirmar início.
+                         */
+
+                        if (
+                            !speechDetected &&
+                            voiceFrameCounter >=
+                            VOICE_FRAMES_TO_START
+                        ) {
+
+                            startSpeech();
+
+                        }
+
+
+                    } else {
+
+                        voiceFrameCounter = 0;
+
+
+                        if (
+                            speechDetected
+                        ) {
+
+                            silenceFrameCounter++;
+
+                        }
+
+                    }
+
+
+                    /* -------------------------------------
+                       GUARDA PCM DURANTE A FALA
+                       ------------------------------------- */
+
+                    if (
+                        speechDetected
+                    ) {
+
+                        speechBuffer.push(
+                            pcm
+                        );
+
+                        speechBytes +=
+                            pcm.length;
+
+                    }
+
+
+                    /* -------------------------------------
+                       FIM DA FALA
+                       ------------------------------------- */
+
+                    if (
+                        speechDetected &&
+                        silenceFrameCounter >=
+                        SILENCE_FRAMES_TO_END
+                    ) {
+
+                        finishSpeech();
+
+                    }
+
+
+                    /* -------------------------------------
+                       LOG
                        ------------------------------------- */
 
                     if (
@@ -417,18 +630,16 @@ wss.on("connection", (ws, req) => {
                     ) {
 
                         console.log(
-                            "ÁUDIO | frames:",
+                            "ÁUDIO | frame:",
                             audioFrameCounter,
-                            "| Opus:",
-                            data.length,
-                            "bytes",
-                            "| PCM:",
-                            pcm.length,
-                            "bytes",
                             "| RMS:",
                             rms.toFixed(0),
                             "| Pico:",
-                            peak
+                            peak,
+                            "| estado:",
+                            speechDetected
+                                ? "FALANDO"
+                                : "silêncio"
                         );
 
                     }
@@ -445,6 +656,7 @@ wss.on("connection", (ws, req) => {
 
 
                 return;
+
             }
 
 
@@ -516,6 +728,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -535,6 +748,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -553,6 +767,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
@@ -570,6 +785,7 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
+
                 }
 
 
