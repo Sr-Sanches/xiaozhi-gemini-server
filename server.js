@@ -23,11 +23,11 @@ const WEBSOCKET_URL =
    CONFIGURAÇÃO DO VAD
 ========================================================= */
 
-const VOICE_THRESHOLD = 1800;
+const VOICE_THRESHOLD = 2500;
 
 const SILENCE_FRAMES_TO_END = 15;
 
-const VOICE_FRAMES_TO_START = 2;
+const VOICE_FRAMES_TO_START = 4;
 
 
 /* =========================================================
