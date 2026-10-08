@@ -40,13 +40,10 @@ app.post("/chat", async (req, res) => {
         const message = req.body.message;
 
         if (!message) {
-
             return res.status(400).json({
                 error: "Mensagem não informada"
             });
-
         }
-
 
         const response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
@@ -83,9 +80,7 @@ app.post("/chat", async (req, res) => {
             }
         );
 
-
         const data = await response.json();
-
 
         if (!response.ok) {
 
@@ -97,19 +92,15 @@ app.post("/chat", async (req, res) => {
             return res
                 .status(response.status)
                 .json(data);
-
         }
-
 
         const text =
             data.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Não consegui gerar uma resposta.";
 
-
         res.json({
             response: text
         });
-
 
     } catch (error) {
 
@@ -121,9 +112,7 @@ app.post("/chat", async (req, res) => {
         res.status(500).json({
             error: error.message
         });
-
     }
-
 });
 
 
@@ -143,7 +132,6 @@ app.get("/xiaozhi/ota/", (req, res) => {
         }
 
     });
-
 });
 
 
@@ -240,36 +228,30 @@ wss.on("connection", (ws, req) => {
     console.log("=================================");
     console.log("NOVO CLIENTE WEBSOCKET");
 
-
     console.log(
         "URL:",
         requestUrl
     );
-
 
     console.log(
         "IP:",
         clientIp
     );
 
-
     console.log(
         "Device-ID:",
         req.headers["device-id"]
     );
-
 
     console.log(
         "Client-ID:",
         req.headers["client-id"]
     );
 
-
     console.log(
         "Protocol-Version:",
         req.headers["protocol-version"]
     );
-
 
     console.log(
         "Authorization:",
@@ -277,7 +259,6 @@ wss.on("connection", (ws, req) => {
             ? "recebido"
             : "ausente"
     );
-
 
     console.log("=================================");
 
@@ -300,15 +281,12 @@ wss.on("connection", (ws, req) => {
             "Token inválido."
         );
 
-
         ws.close(
             1008,
             "Unauthorized"
         );
 
-
         return;
-
     }
 
 
@@ -318,7 +296,7 @@ wss.on("connection", (ws, req) => {
 
 
     /* =====================================================
-       CRIA SESSÃO
+       SESSÃO
        ===================================================== */
 
     const sessionId =
@@ -333,9 +311,6 @@ wss.on("connection", (ws, req) => {
 
     /* =====================================================
        DECODIFICADOR OPUS
-       
-       16000 Hz
-       Mono
        ===================================================== */
 
     const opusDecoder =
@@ -349,6 +324,13 @@ wss.on("connection", (ws, req) => {
     console.log(
         "Decodificador Opus criado."
     );
+
+
+    /* =====================================================
+       CONTADOR DE ÁUDIO
+       ===================================================== */
+
+    let audioFrameCounter = 0;
 
 
     /* =====================================================
@@ -366,30 +348,96 @@ wss.on("connection", (ws, req) => {
 
             if (isBinary) {
 
-                console.log(
-                    "Áudio recebido:",
-                    data.length,
-                    "bytes"
-                );
+                audioFrameCounter++;
 
 
                 try {
+
+                    /* -------------------------------------
+                       DECODIFICA OPUS → PCM
+                       ------------------------------------- */
 
                     const pcm =
                         opusDecoder.decode(data);
 
 
-                    console.log(
-                        "PCM decodificado:",
-                        pcm.length,
-                        "bytes"
-                    );
+                    /* -------------------------------------
+                       CALCULA RMS E PICO
+                       ------------------------------------- */
+
+                    let sumSquares = 0;
+
+                    let peak = 0;
+
+                    const samples =
+                        pcm.length / 2;
+
+
+                    for (
+                        let i = 0;
+                        i < pcm.length;
+                        i += 2
+                    ) {
+
+                        const sample =
+                            pcm.readInt16LE(i);
+
+
+                        const absolute =
+                            Math.abs(sample);
+
+
+                        if (
+                            absolute > peak
+                        ) {
+
+                            peak =
+                                absolute;
+                        }
+
+
+                        sumSquares +=
+                            sample * sample;
+                    }
+
+
+                    const rms =
+                        Math.sqrt(
+                            sumSquares /
+                            samples
+                        );
+
+
+                    /* -------------------------------------
+                       MOSTRA A CADA 10 FRAMES
+                       ------------------------------------- */
+
+                    if (
+                        audioFrameCounter % 10 === 0
+                    ) {
+
+                        console.log(
+                            "ÁUDIO | frames:",
+                            audioFrameCounter,
+                            "| Opus:",
+                            data.length,
+                            "bytes",
+                            "| PCM:",
+                            pcm.length,
+                            "bytes",
+                            "| RMS:",
+                            rms.toFixed(0),
+                            "| Pico:",
+                            peak
+                        );
+
+                    }
 
 
                 } catch (error) {
 
                     console.error(
-                        "Erro ao decodificar Opus:",
+                        "Erro ao processar áudio:",
                         error.message
                     );
 
@@ -397,7 +445,6 @@ wss.on("connection", (ws, req) => {
 
 
                 return;
-
             }
 
 
@@ -469,7 +516,6 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
-
                 }
 
 
@@ -489,7 +535,6 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
-
                 }
 
 
@@ -508,7 +553,6 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
-
                 }
 
 
@@ -526,7 +570,6 @@ wss.on("connection", (ws, req) => {
 
 
                     return;
-
                 }
 
 
