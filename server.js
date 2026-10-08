@@ -1,4 +1,4 @@
-import express from "express";
+       import express from "express";
 import { WebSocketServer } from "ws";
 import http from "http";
 import { randomUUID } from "node:crypto";
@@ -9,40 +9,29 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// =====================================================
-// CONFIGURAÇÕES
-// =====================================================
-
 const XIAOZHI_TOKEN =
     process.env.XIAOZHI_TOKEN || "xiaozhi-render-test-token";
 
 const WEBSOCKET_URL =
     "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
-// =====================================================
-// PÁGINA PRINCIPAL
-// =====================================================
-
 app.get("/", (req, res) => {
     res.send("Xiaozhi Gemini Server funcionando!");
 });
 
-// =====================================================
-// TESTE GEMINI
-// =====================================================
+
+// ======================================================
+// GEMINI
+// ======================================================
 
 app.post("/chat", async (req, res) => {
-
     try {
-
         const message = req.body.message;
 
         if (!message) {
-
             return res.status(400).json({
                 error: "Mensagem não informada"
             });
-
         }
 
         const response = await fetch(
@@ -56,7 +45,6 @@ app.post("/chat", async (req, res) => {
                 },
 
                 body: JSON.stringify({
-
                     contents: [
                         {
                             parts: [
@@ -75,7 +63,6 @@ app.post("/chat", async (req, res) => {
                             }
                         ]
                     }
-
                 })
             }
         );
@@ -83,7 +70,6 @@ app.post("/chat", async (req, res) => {
         const data = await response.json();
 
         if (!response.ok) {
-
             console.error(
                 "Erro Gemini:",
                 JSON.stringify(data)
@@ -101,7 +87,6 @@ app.post("/chat", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "Erro no servidor:",
             error
@@ -110,40 +95,46 @@ app.post("/chat", async (req, res) => {
         res.status(500).json({
             error: error.message
         });
-
     }
-
 });
 
-// =====================================================
-// OTA - GET
-// =====================================================
+
+// ======================================================
+// OTA
+// ======================================================
 
 app.get("/xiaozhi/ota/", (req, res) => {
 
     res.json({
-
         message: "Xiaozhi OTA funcionando!",
 
         websocket: {
             url: WEBSOCKET_URL
         }
-
     });
-
 });
 
-// =====================================================
-// OTA - POST
-// =====================================================
 
 app.post("/xiaozhi/ota/", (req, res) => {
 
     console.log("=================================");
     console.log("OTA REQUEST RECEBIDO");
-    console.log("Device-ID:", req.headers["device-id"]);
-    console.log("Client-ID:", req.headers["client-id"]);
-    console.log("User-Agent:", req.headers["user-agent"]);
+
+    console.log(
+        "Device-ID:",
+        req.headers["device-id"]
+    );
+
+    console.log(
+        "Client-ID:",
+        req.headers["client-id"]
+    );
+
+    console.log(
+        "User-Agent:",
+        req.headers["user-agent"]
+    );
+
     console.log("=================================");
 
     const deviceVersion =
@@ -166,24 +157,20 @@ app.post("/xiaozhi/ota/", (req, res) => {
             url: WEBSOCKET_URL,
             token: XIAOZHI_TOKEN
         }
-
     });
-
 });
 
-// =====================================================
-// SERVIDOR HTTP
-// =====================================================
+
+// ======================================================
+// WEBSOCKET
+// ======================================================
 
 const server = http.createServer(app);
-
-// =====================================================
-// WEBSOCKET
-// =====================================================
 
 const wss = new WebSocketServer({
     server
 });
+
 
 wss.on("connection", (ws, req) => {
 
@@ -193,19 +180,48 @@ wss.on("connection", (ws, req) => {
     const requestUrl =
         req.url || "/";
 
+
     console.log("=================================");
     console.log("NOVO CLIENTE WEBSOCKET");
-    console.log("URL:", requestUrl);
-    console.log("IP:", clientIp);
-    console.log("Device-ID:", req.headers["device-id"]);
-    console.log("Client-ID:", req.headers["client-id"]);
-    console.log("Protocol-Version:", req.headers["protocol-version"]);
-    console.log("Authorization:", req.headers["authorization"] ? "recebido" : "ausente");
+
+    console.log(
+        "URL:",
+        requestUrl
+    );
+
+    console.log(
+        "IP:",
+        clientIp
+    );
+
+    console.log(
+        "Device-ID:",
+        req.headers["device-id"]
+    );
+
+    console.log(
+        "Client-ID:",
+        req.headers["client-id"]
+    );
+
+    console.log(
+        "Protocol-Version:",
+        req.headers["protocol-version"]
+    );
+
+    console.log(
+        "Authorization:",
+        req.headers["authorization"]
+            ? "recebido"
+            : "ausente"
+    );
+
     console.log("=================================");
 
-    // -------------------------------------------------
+
+    // ==================================================
     // TOKEN
-    // -------------------------------------------------
+    // ==================================================
 
     const authorization =
         req.headers["authorization"] || "";
@@ -213,9 +229,12 @@ wss.on("connection", (ws, req) => {
     const expected =
         `Bearer ${XIAOZHI_TOKEN}`;
 
+
     if (authorization !== expected) {
 
-        console.log("Token inválido.");
+        console.log(
+            "Token inválido."
+        );
 
         ws.close(
             1008,
@@ -225,45 +244,159 @@ wss.on("connection", (ws, req) => {
         return;
     }
 
-    console.log("Token válido!");
 
-    // -------------------------------------------------
-    // SESSION
-    // -------------------------------------------------
+    console.log(
+        "Token válido!"
+    );
 
-    const sessionId = randomUUID();
+
+    // ==================================================
+    // SESSÃO
+    // ==================================================
+
+    const sessionId =
+        randomUUID();
+
 
     console.log(
         "Session:",
         sessionId
     );
 
-    // -------------------------------------------------
-    // RECEBER MENSAGENS
-    // -------------------------------------------------
+
+    // ==================================================
+    // BUFFER DE ÁUDIO
+    // ==================================================
+
+    let audioChunks = [];
+
+    let audioBytes = 0;
+
+    let lastAudioTime = 0;
+
+    let silenceTimer = null;
+
+
+    // ==================================================
+    // FINALIZAR FALA
+    // ==================================================
+
+    function finishSpeech() {
+
+        if (audioChunks.length === 0) {
+            return;
+        }
+
+
+        const totalFrames =
+            audioChunks.length;
+
+
+        const totalBytes =
+            audioBytes;
+
+
+        console.log("");
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "FALA FINALIZADA"
+        );
+
+        console.log(
+            "Frames:",
+            totalFrames
+        );
+
+        console.log(
+            "Bytes totais:",
+            totalBytes
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log("");
+
+
+        // Por enquanto não enviamos para STT.
+        // Apenas limpamos o buffer.
+
+        audioChunks = [];
+
+        audioBytes = 0;
+
+        lastAudioTime = 0;
+
+        silenceTimer = null;
+    }
+
+
+    // ==================================================
+    // MENSAGENS
+    // ==================================================
 
     ws.on("message", async (data, isBinary) => {
 
-        // =============================================
-        // ÁUDIO
-        // =============================================
+
+        // ==============================================
+        // ÁUDIO OPUS
+        // ==============================================
 
         if (isBinary) {
 
+            const chunk =
+                Buffer.from(data);
+
+
+            audioChunks.push(chunk);
+
+            audioBytes +=
+                chunk.length;
+
+
+            lastAudioTime =
+                Date.now();
+
+
             console.log(
                 "Áudio recebido:",
-                data.length,
+                chunk.length,
                 "bytes"
             );
 
-            // STT será implementado depois.
+
+            // Cancela timer anterior
+
+            if (silenceTimer) {
+
+                clearTimeout(
+                    silenceTimer
+                );
+            }
+
+
+            // Consideramos que a fala terminou
+            // após 800 ms sem novos frames.
+
+            silenceTimer =
+                setTimeout(() => {
+
+                    finishSpeech();
+
+                }, 800);
+
 
             return;
         }
 
-        // =============================================
+
+        // ==============================================
         // JSON
-        // =============================================
+        // ==============================================
 
         try {
 
@@ -272,52 +405,71 @@ wss.on("connection", (ws, req) => {
                     data.toString()
                 );
 
+
             console.log(
                 "JSON recebido:",
                 JSON.stringify(message)
             );
 
-            // =========================================
-            // HELLO
-            // =========================================
 
-            if (message.type === "hello") {
+            // ==========================================
+            // HELLO
+            // ==========================================
+
+            if (
+                message.type === "hello"
+            ) {
 
                 console.log(
                     "Hello recebido do Xiaozhi"
                 );
+
 
                 ws.send(
                     JSON.stringify({
 
                         type: "hello",
 
-                        transport: "websocket",
+                        transport:
+                            "websocket",
 
-                        session_id: sessionId,
+                        session_id:
+                            sessionId,
 
                         audio_params: {
-                            format: "opus",
-                            sample_rate: 16000,
-                            channels: 1,
-                            frame_duration: 60
-                        }
 
+                            format:
+                                "opus",
+
+                            sample_rate:
+                                16000,
+
+                            channels:
+                                1,
+
+                            frame_duration:
+                                60
+                        }
                     })
                 );
+
 
                 console.log(
                     "Hello enviado."
                 );
 
+
                 return;
             }
 
-            // =========================================
-            // LISTEN
-            // =========================================
 
-            if (message.type === "listen") {
+            // ==========================================
+            // LISTEN
+            // ==========================================
+
+            if (
+                message.type === "listen"
+            ) {
 
                 console.log(
                     "Listen:",
@@ -325,35 +477,62 @@ wss.on("connection", (ws, req) => {
                     message.mode || ""
                 );
 
+
                 return;
             }
 
-            // =========================================
-            // ABORT
-            // =========================================
 
-            if (message.type === "abort") {
+            // ==========================================
+            // ABORT
+            // ==========================================
+
+            if (
+                message.type === "abort"
+            ) {
 
                 console.log(
                     "Abort:",
                     message.reason || ""
                 );
 
+
+                // Limpa áudio acumulado
+
+                audioChunks = [];
+
+                audioBytes = 0;
+
+
+                if (silenceTimer) {
+
+                    clearTimeout(
+                        silenceTimer
+                    );
+
+                    silenceTimer = null;
+                }
+
+
                 return;
             }
 
-            // =========================================
-            // MCP
-            // =========================================
 
-            if (message.type === "mcp") {
+            // ==========================================
+            // MCP
+            // ==========================================
+
+            if (
+                message.type === "mcp"
+            ) {
 
                 console.log(
                     "MCP recebido."
                 );
 
+
                 return;
             }
+
 
         } catch (error) {
 
@@ -361,14 +540,13 @@ wss.on("connection", (ws, req) => {
                 "Erro ao processar JSON:",
                 error
             );
-
         }
-
     });
 
-    // -------------------------------------------------
-    // DESCONECTADO
-    // -------------------------------------------------
+
+    // ==================================================
+    // CLOSE
+    // ==================================================
 
     ws.on("close", () => {
 
@@ -377,11 +555,19 @@ wss.on("connection", (ws, req) => {
             sessionId
         );
 
+
+        if (silenceTimer) {
+
+            clearTimeout(
+                silenceTimer
+            );
+        }
     });
 
-    // -------------------------------------------------
-    // ERRO
-    // -------------------------------------------------
+
+    // ==================================================
+    // ERROR
+    // ==================================================
 
     ws.on("error", (error) => {
 
@@ -389,14 +575,14 @@ wss.on("connection", (ws, req) => {
             "Erro WebSocket:",
             error
         );
-
     });
 
 });
 
-// =====================================================
-// INICIAR SERVIDOR
-// =====================================================
+
+// ======================================================
+// START SERVER
+// ======================================================
 
 server.listen(
     PORT,
@@ -418,6 +604,5 @@ server.listen(
         console.log(
             "OTA: OK"
         );
-
     }
 );
