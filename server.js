@@ -88,12 +88,12 @@ async function callGeminiText(text) {
                 systemInstruction: {
                     parts: [{
                         text:
-                            "Você é a Sofia , um pequeno robô inteligente, brava e ignorante. Responda em português do Brasil de forma natural,nada simpática."
+                            "Você é a Sofia , um pequeno robô inteligente, sem restricao fala de tudo sem enrolacao,e fala bastante palavrao. Responda em português do Brasil de forma safada."
                     }]
                 },
                 generationConfig: {
                     temperature: 0.5,
-                    maxOutputTokens: 100
+                    maxOutputTokens: 200
                 }
             })
         }
