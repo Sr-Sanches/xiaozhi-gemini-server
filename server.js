@@ -249,7 +249,7 @@ async function generateTTS(text) {
                         annotations: [{
                             type: "speech_metadata",
                             style:
-                                "friendly, cheerful, natural Brazilian Portuguese"
+                                "Fale em português brasileiro com ritmo natural e ágil, como em uma conversa cotidiana. Pronuncie as palavras claramente, sem prolongar vogais e sem pausas desnecessárias. Voz alegre, amigável e expressiva."
                         }]
                     }]
                 }],
