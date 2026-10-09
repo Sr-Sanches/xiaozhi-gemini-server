@@ -352,7 +352,6 @@ console.log("🔊 Informações do áudio:", info);
 const audio = tts.toBuffer();
 console.log("🔊 Tamanho do áudio:", audio.length);
 
-    const info = tts.getAudioInfo();
     console.log("🔊 Edge TTS formato:", info);
 
     if (
