@@ -42,6 +42,110 @@ app.get("/", (req, res) => {
 
 });
 
+/* =========================================================
+   TESTE TEMPORÁRIO DO GEMINI TTS
+========================================================= */
+
+app.get("/teste-tts", async (req, res) => {
+    // Protege a rota para evitar chamadas indevidas à API.
+    if (req.query.token !== XIAOZHI_TOKEN) {
+        return res.status(401).json({
+            ok: false,
+            erro: "Token inválido."
+        });
+    }
+
+    try {
+        console.log("🔊 Iniciando teste Gemini TTS...");
+
+        const response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": process.env.GEMINI_API_KEY
+                },
+                body: JSON.stringify({
+                    model: "gemini-3.8-flash-lite-tts",
+                    input: [{
+                        type: "user_input",
+                        content: [{
+                            type: "text",
+                            text: "Olá! Eu sou o Xiaozhi. É muito bom falar com você.",
+                            annotations: [{
+                                type: "speech_metadata",
+                                style: "friendly, cheerful, natural Brazilian Portuguese"
+                            }]
+                        }]
+                    }],
+                    response_format: {
+                        type: "audio",
+                        mime_type: "audio/l16",
+                        sample_rate: 16000
+                    },
+                    generation_config: {
+                        speech_config: [
+                            { voice: "Kore" }
+                        ]
+                    }
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("Erro Gemini TTS:", JSON.stringify(data));
+
+            return res.status(response.status).json({
+                ok: false,
+                etapa: "Gemini TTS",
+                erro: data
+            });
+        }
+
+        const audioContent = (data.steps || [])
+            .filter(step => step.type === "model_output")
+            .flatMap(step => step.content || [])
+            .find(content => content.type === "audio");
+
+        if (!audioContent?.data) {
+            console.error("Resposta sem áudio:", JSON.stringify(data));
+
+            return res.status(502).json({
+                ok: false,
+                erro: "A API respondeu, mas não retornou áudio."
+            });
+        }
+
+        const pcm = Buffer.from(audioContent.data, "base64");
+
+        const resultado = {
+            ok: true,
+            modelo: "gemini-3.8-flash-lite-tts",
+            formato: "PCM 16-bit mono",
+            frequencia: 16000,
+            tamanho_bytes: pcm.length,
+            duracao_segundos: Number(
+                (pcm.length / 2 / 16000).toFixed(2)
+            ),
+            mensagem: "TTS gerou áudio com sucesso!"
+        };
+
+        console.log("✅ TTS funcionando:", JSON.stringify(resultado));
+
+        return res.json(resultado);
+
+    } catch (error) {
+        console.error("Erro no teste TTS:", error);
+
+        return res.status(500).json({
+            ok: false,
+            erro: error.message
+        });
+    }
+});
 
 /* =========================================================
    CHAT HTTP
