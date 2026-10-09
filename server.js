@@ -342,10 +342,10 @@ async function generateTTS(text) {
     console.log("🔊 Voz selecionada:", TTS_VOICE);
 
 await tts.synthesize(
-    "Ola, teste de voz.",
-    "pt-BR-FranciscaNeural",
+    text,
+    TTS_VOICE,
     {
-        rate: "+15%",
+        rate: TTS_RATE,
         outputFormat: "audio-24khz-48kbitrate-mono-mp3"
     }
 );
