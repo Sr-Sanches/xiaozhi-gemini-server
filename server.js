@@ -528,6 +528,7 @@ wss.on("connection", (ws, req) => {
     silenceFrameCounter = 0;
     speechBuffer = [...preSpeechBuffer];
     speechBytes = speechBuffer.reduce((total, frame) => total + frame.length, 0);
+    preSpeechBuffer = [];
 
     console.log("🎤 VOZ DETECTADA");
 }
