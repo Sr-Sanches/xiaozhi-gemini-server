@@ -354,7 +354,6 @@ console.log(
     wav.subarray(0, 16).toString("ascii")
 );
 
-const { pcm, sampleRate } = extractWavPcm(wav);
     const { pcm, sampleRate } = extractWavPcm(wav);
     const outputPcm = resamplePcm16(
         pcm,
