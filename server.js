@@ -337,12 +337,20 @@ async function generateTTS(text) {
 
     const tts = new EdgeTTS();
 
-    await tts.synthesize(text, TTS_VOICE, {
-        rate: TTS_RATE,
-        outputFormat: "riff-24khz-16bit-mono-pcm"
-    });
+    console.log("🔊 Iniciando síntese Edge TTS...");
 
-    const audio = tts.toBuffer();
+await tts.synthesize(text, TTS_VOICE, {
+    rate: TTS_RATE,
+    outputFormat: "riff-24khz-16bit-mono-pcm"
+});
+
+console.log("🔊 Síntese terminou.");
+
+const info = tts.getAudioInfo();
+console.log("🔊 Informações do áudio:", info);
+
+const audio = tts.toBuffer();
+console.log("🔊 Tamanho do áudio:", audio.length);
 
     const info = tts.getAudioInfo();
     console.log("🔊 Edge TTS formato:", info);
