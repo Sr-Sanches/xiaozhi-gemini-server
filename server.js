@@ -341,11 +341,17 @@ async function generateTTS(text) {
     console.log("🔊 Texto enviado:", text);
     console.log("🔊 Voz selecionada:", TTS_VOICE);
 
-await tts.synthesize(text, TTS_VOICE, {
-    rate: TTS_RATE,
-    outputFormat: "riff-24khz-16bit-mono-pcm"
-});
+await tts.synthesize(
+    "Ola, teste de voz.",
+    "pt-BR-FranciscaNeural",
+    {
+        rate: "+15%",
+        outputFormat: "audio-24khz-48kbitrate-mono-mp3"
+    }
+);
 
+console.log("Tamanho recebido:", tts.audio_stream?.length);
+console.log("Áudio em bytes:", tts.toBuffer().length);    
 console.log("🔊 Dados recebidos:", tts.audio_stream?.length);
 console.log("🔊 Síntese terminou.");
 
