@@ -4,6 +4,7 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { EdgeTTS, Constants } from "@andresaya/edge-tts";
+import decodeMp3 from "@audio/decode-mp3";
 
 const require = createRequire(import.meta.url);
 const OpusScript = require("opusscript");
@@ -337,54 +338,58 @@ async function generateTTS(text) {
 
     const tts = new EdgeTTS();
 
-    console.log("🔊 Iniciando síntese Edge TTS...");
-    console.log("🔊 Texto enviado:", text);
-    console.log("🔊 Voz selecionada:", TTS_VOICE);
-
-await tts.synthesize(
-    text,
-    TTS_VOICE,
-    {
+    await tts.synthesize(text, TTS_VOICE, {
         rate: TTS_RATE,
         outputFormat: "audio-24khz-48kbitrate-mono-mp3"
-    }
-);
+    });
 
-console.log("Tamanho recebido:", tts.audio_stream?.length);
-console.log("Áudio em bytes:", tts.toBuffer().length);    
-console.log("🔊 Dados recebidos:", tts.audio_stream?.length);
-console.log("🔊 Síntese terminou.");
+    const audio = tts.toBuffer();
 
-const info = tts.getAudioInfo();
-console.log("🔊 Informações do áudio:", info);
-
-const audio = tts.toBuffer();
-console.log("🔊 Tamanho do áudio:", audio.length);
-
-    console.log("🔊 Edge TTS formato:", info);
-
-    if (
-        !Buffer.isBuffer(audio) ||
-        audio.length < 12 ||
-        audio.toString("ascii", 0, 4) !== "RIFF" ||
-        audio.toString("ascii", 8, 12) !== "WAVE"
-    ) {
+    if (!Buffer.isBuffer(audio) || audio.length < 100) {
         throw new Error(
-            "Edge TTS ainda retornou áudio que não é WAV. " +
-            "Formato informado: " + JSON.stringify(info)
+            `Edge TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`
         );
     }
 
-    const { pcm, sampleRate } = extractWavPcm(audio);
+    console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
+
+    const decoded = await decodeMp3(audio);
+    const channelData = decoded.channelData;
+    const sourceRate = decoded.sampleRate;
+
+    if (
+        !channelData?.length ||
+        !channelData[0]?.length ||
+        !sourceRate
+    ) {
+        throw new Error("Não foi possível decodificar o áudio MP3.");
+    }
+
+    const left = channelData[0];
+    const right = channelData[1];
+    const pcm = Buffer.alloc(left.length * 2);
+
+    for (let i = 0; i < left.length; i++) {
+        const sample = right
+            ? (left[i] + right[i]) / 2
+            : left[i];
+
+        const value = Math.max(
+            -32768,
+            Math.min(32767, Math.round(sample * 32767))
+        );
+
+        pcm.writeInt16LE(value, i * 2);
+    }
 
     const outputPcm = resamplePcm16(
         pcm,
-        sampleRate,
+        sourceRate,
         SAMPLE_RATE
     );
 
     if (outputPcm.length < 2) {
-        throw new Error("Edge TTS retornou áudio vazio.");
+        throw new Error("O áudio PCM convertido ficou vazio.");
     }
 
     console.log(
@@ -394,6 +399,7 @@ console.log("🔊 Tamanho do áudio:", audio.length);
 
     return outputPcm;
 }
+
 
 /* =========================================================
    ENVIAR PCM CODIFICADO EM OPUS AO ESP32
