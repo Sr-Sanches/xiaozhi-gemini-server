@@ -342,19 +342,25 @@ async function generateTTS(text) {
         outputFormat: Constants.OUTPUT_FORMAT.RIFF_24KHZ_16BIT_MONO_PCM
     });
 
-    const wav = tts.toBuffer();
+    const audio = tts.toBuffer();
 
-console.log("Edge TTS formato:", tts.getAudioInfo());
-console.log(
-    "Edge TTS primeiros bytes:",
-    wav.subarray(0, 24).toString("hex")
-);
-console.log(
-    "Edge TTS cabeçalho:",
-    wav.subarray(0, 16).toString("ascii")
-);
+    const info = tts.getAudioInfo();
+    console.log("🔊 Edge TTS formato:", info);
 
-    const { pcm, sampleRate } = extractWavPcm(wav);
+    if (
+        !Buffer.isBuffer(audio) ||
+        audio.length < 12 ||
+        audio.toString("ascii", 0, 4) !== "RIFF" ||
+        audio.toString("ascii", 8, 12) !== "WAVE"
+    ) {
+        throw new Error(
+            "Edge TTS ainda retornou áudio que não é WAV. " +
+            "Formato informado: " + JSON.stringify(info)
+        );
+    }
+
+    const { pcm, sampleRate } = extractWavPcm(audio);
+
     const outputPcm = resamplePcm16(
         pcm,
         sampleRate,
@@ -366,8 +372,8 @@ console.log(
     }
 
     console.log(
-        `🔊 Edge TTS pronto: ${outputPcm.length} bytes PCM, ` +
-        `${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s a 16 kHz`
+        `🔊 PCM pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s, ` +
+        `${outputPcm.length} bytes, ${SAMPLE_RATE} Hz`
     );
 
     return outputPcm;
