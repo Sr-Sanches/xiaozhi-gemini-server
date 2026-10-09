@@ -171,9 +171,16 @@ function pcmToWav(pcmBuffers) {
 async function transcribeAudio(pcmBuffers) {
     if (!pcmBuffers?.length) return null;
 
+    const totalStart = Date.now();
+
     const wav = pcmToWav(pcmBuffers);
 
     console.log(`📝 STT: WAV de ${wav.length} bytes`);
+    console.log(
+        `⏱️ STT: preparação WAV: ${Date.now() - totalStart} ms`
+    );
+
+    const requestStart = Date.now();
 
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent`,
@@ -193,14 +200,17 @@ async function transcribeAudio(pcmBuffers) {
                             }
                         },
                         {
-                            text:
-                                "Transcreva exatamente o que foi falado neste áudio em português do Brasil. Retorne somente a transcrição, sem explicações e sem responder à pergunta."
+                            text: "Transcreva exatamente o que foi falado neste áudio em português do Brasil. Retorne somente a transcrição, sem explicações e sem responder à pergunta."
                         }
                     ]
                 }],
                 generationConfig: { temperature: 0 }
             })
         }
+    );
+
+    console.log(
+        `⏱️ STT: espera pela resposta HTTP: ${((Date.now() - requestStart) / 1000).toFixed(2)} s`
     );
 
     const data = await response.json();
@@ -216,6 +226,10 @@ async function transcribeAudio(pcmBuffers) {
         .join("")
         .trim();
 
+    console.log(
+        `⏱️ STT: tempo total: ${((Date.now() - totalStart) / 1000).toFixed(2)} s`
+    );
+
     if (!text) {
         console.log("⚠️ STT não retornou texto.");
         return null;
@@ -224,6 +238,7 @@ async function transcribeAudio(pcmBuffers) {
     console.log("📝 STT:", text);
     return text;
 }
+
 
 /* =========================================================
    EDGE TTS WAV — EXTRAIR PCM E CONVERTER PARA 16 kHz
