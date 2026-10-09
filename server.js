@@ -292,7 +292,9 @@ async function generateTTS(text) {
     if (pcm.length < 2) {
         throw new Error("O TTS retornou áudio vazio.");
     }
-
+    console.log("TTS bytes:", pcm.length);
+    console.log("TTS duração a 16 kHz:", (pcm.length / 2 / 16000).toFixed(2), "s");
+    console.log("TTS duração a 24 kHz:", (pcm.length / 2 / 24000).toFixed(2), "s");
     console.log(
         `🔊 TTS pronto: ${pcm.length} bytes, ` +
         `${(pcm.length / 2 / SAMPLE_RATE).toFixed(2)} s`
