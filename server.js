@@ -522,15 +522,15 @@ wss.on("connection", (ws, req) => {
     let closed = false;
 
     function startSpeech() {
-        if (speechDetected || processingSpeech || isSpeaking) return;
+    if (speechDetected || processingSpeech || isSpeaking) return;
 
-        speechDetected = true;
-        silenceFrameCounter = 0;
-        speechBuffer = [];
-        speechBytes = 0;
+    speechDetected = true;
+    silenceFrameCounter = 0;
+    speechBuffer = [...preSpeechBuffer];
+    speechBytes = speechBuffer.reduce((total, frame) => total + frame.length, 0);
 
-        console.log("🎤 VOZ DETECTADA");
-    }
+    console.log("🎤 VOZ DETECTADA");
+}
 
     async function finishSpeech() {
         if (!speechDetected) return;
