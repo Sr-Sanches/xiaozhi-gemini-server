@@ -646,6 +646,13 @@ wss.on("connection", (ws, req) => {
                     speechBytes += pcm.length;
                 }
 
+                if (!speechDetected) {
+    preSpeechBuffer.push(pcm);
+
+    if (preSpeechBuffer.length > 5) {
+        preSpeechBuffer.shift();
+    }
+}
                 if (
                     speechDetected &&
                     silenceFrameCounter >= SILENCE_FRAMES_TO_END
