@@ -343,6 +343,18 @@ async function generateTTS(text) {
     });
 
     const wav = tts.toBuffer();
+
+console.log("Edge TTS formato:", tts.getAudioInfo());
+console.log(
+    "Edge TTS primeiros bytes:",
+    wav.subarray(0, 24).toString("hex")
+);
+console.log(
+    "Edge TTS cabeçalho:",
+    wav.subarray(0, 16).toString("ascii")
+);
+
+const { pcm, sampleRate } = extractWavPcm(wav);
     const { pcm, sampleRate } = extractWavPcm(wav);
     const outputPcm = resamplePcm16(
         pcm,
