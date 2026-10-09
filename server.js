@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { EdgeTTS, Constants } from "@andresaya/edge-tts";
 
 const require = createRequire(import.meta.url);
 const OpusScript = require("opusscript");
@@ -18,17 +19,18 @@ const WEBSOCKET_URL =
     "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
-const TTS_MODEL = "gemini-3.8-flash-lite-tts";
-const SAMPLE_RATE = 16000;
-const FRAME_SAMPLES = 960; // 60 ms
+const TTS_VOICE = "pt-BR-FranciscaNeural";
+const TTS_RATE = "+15%";
 
-// Mantém o VAD ajustado anteriormente.
+const SAMPLE_RATE = 16000;
+const EDGE_SAMPLE_RATE = 24000;
+const FRAME_SAMPLES = 960;
+
 const VOICE_THRESHOLD = 2500;
 const SILENCE_FRAMES_TO_END = 15;
 const VOICE_FRAMES_TO_START = 4;
 
-const delay = ms =>
-    new Promise(resolve => setTimeout(resolve, ms));
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /* =========================================================
    ROTAS HTTP
@@ -66,7 +68,7 @@ app.post("/xiaozhi/ota/", (req, res) => {
 });
 
 /* =========================================================
-   CHAT HTTP — MANTIDO PARA TESTES
+   GEMINI — RESPOSTA EM TEXTO
 ========================================================= */
 
 async function callGeminiText(text) {
@@ -132,7 +134,7 @@ app.post("/chat", async (req, res) => {
 });
 
 /* =========================================================
-   PCM PARA WAV — USADO PELO STT
+   PCM PARA WAV — STT
 ========================================================= */
 
 function pcmToWav(pcmBuffers) {
@@ -162,7 +164,7 @@ function pcmToWav(pcmBuffers) {
 }
 
 /* =========================================================
-   STT — TRANSCRIÇÃO
+   STT — TRANSCRIÇÃO COM GEMINI
 ========================================================= */
 
 async function transcribeAudio(pcmBuffers) {
@@ -170,9 +172,7 @@ async function transcribeAudio(pcmBuffers) {
 
     const wav = pcmToWav(pcmBuffers);
 
-    console.log(
-        `📝 STT: enviando WAV de ${wav.length} bytes`
-    );
+    console.log(`📝 STT: WAV de ${wav.length} bytes`);
 
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent`,
@@ -225,82 +225,141 @@ async function transcribeAudio(pcmBuffers) {
 }
 
 /* =========================================================
-   TTS — GEMINI INTERACTIONS API
+   EDGE TTS WAV — EXTRAIR PCM E CONVERTER PARA 16 kHz
+========================================================= */
+
+function extractWavPcm(wav) {
+    if (!Buffer.isBuffer(wav) || wav.length < 12) {
+        throw new Error("Edge TTS retornou um WAV inválido.");
+    }
+
+    if (
+        wav.toString("ascii", 0, 4) !== "RIFF" ||
+        wav.toString("ascii", 8, 12) !== "WAVE"
+    ) {
+        throw new Error("O áudio do Edge TTS não está no formato WAV.");
+    }
+
+    let offset = 12;
+    let sampleRate = 0;
+    let channels = 0;
+    let bitsPerSample = 0;
+    let audioFormat = 0;
+    let pcm = null;
+
+    while (offset + 8 <= wav.length) {
+        const chunkId = wav.toString("ascii", offset, offset + 4);
+        const chunkSize = wav.readUInt32LE(offset + 4);
+        const start = offset + 8;
+        const end = start + chunkSize;
+
+        if (end > wav.length) {
+            throw new Error("Chunk WAV incompleto.");
+        }
+
+        if (chunkId === "fmt ") {
+            audioFormat = wav.readUInt16LE(start);
+            channels = wav.readUInt16LE(start + 2);
+            sampleRate = wav.readUInt32LE(start + 4);
+            bitsPerSample = wav.readUInt16LE(start + 14);
+        }
+
+        if (chunkId === "data") {
+            pcm = wav.subarray(start, end);
+        }
+
+        offset = end + (chunkSize % 2);
+    }
+
+    if (
+        audioFormat !== 1 ||
+        channels !== 1 ||
+        bitsPerSample !== 16 ||
+        !sampleRate ||
+        !pcm?.length
+    ) {
+        throw new Error(
+            `Formato WAV incompatível: formato=${audioFormat}, canais=${channels}, bits=${bitsPerSample}, Hz=${sampleRate}`
+        );
+    }
+
+    return { pcm, sampleRate };
+}
+
+function resamplePcm16(pcm, sourceRate, targetRate) {
+    if (sourceRate === targetRate) {
+        return Buffer.from(pcm);
+    }
+
+    if (pcm.length < 2 || pcm.length % 2 !== 0) {
+        throw new Error("PCM inválido para conversão.");
+    }
+
+    const inputSamples = pcm.length / 2;
+    const outputSamples = Math.floor(
+        inputSamples * targetRate / sourceRate
+    );
+
+    const output = Buffer.alloc(outputSamples * 2);
+    const ratio = sourceRate / targetRate;
+
+    for (let i = 0; i < outputSamples; i++) {
+        const position = i * ratio;
+        const left = Math.floor(position);
+        const right = Math.min(left + 1, inputSamples - 1);
+        const fraction = position - left;
+
+        const a = pcm.readInt16LE(left * 2);
+        const b = pcm.readInt16LE(right * 2);
+        const sample = Math.round(a + (b - a) * fraction);
+
+        output.writeInt16LE(
+            Math.max(-32768, Math.min(32767, sample)),
+            i * 2
+        );
+    }
+
+    return output;
+}
+
+/* =========================================================
+   TTS — EDGE TTS
 ========================================================= */
 
 async function generateTTS(text) {
-    console.log(`🔊 TTS: gerando voz com ${TTS_MODEL}`);
-
-    const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/interactions",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": process.env.GEMINI_API_KEY
-            },
-            body: JSON.stringify({
-                model: TTS_MODEL,
-                input: [{
-                    type: "user_input",
-                    content: [{
-                        type: "text",
-                        text,
-                        annotations: [{
-                            type: "speech_metadata",
-                            style:
-                                "Fale em português brasileiro com ritmo natural e ágil, como em uma conversa cotidiana. Pronuncie as palavras claramente, sem prolongar vogais e sem pausas desnecessárias. Voz alegre, amigável e expressiva."
-                        }]
-                    }]
-                }],
-                response_format: {
-                    type: "audio",
-                    mime_type: "audio/l16",
-                    sample_rate: SAMPLE_RATE
-                },
-                generation_config: {
-                    speech_config: [
-                        { voice: "Kore" }
-                    ]
-                }
-            })
-        }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(
-            `TTS HTTP ${response.status}: ${JSON.stringify(data)}`
-        );
+    if (!text?.trim()) {
+        throw new Error("Texto vazio para gerar voz.");
     }
 
-    // A resposta REST guarda o áudio em steps[].content[].
-    const audioContent = (data.steps || [])
-        .filter(step => step.type === "model_output")
-        .flatMap(step => step.content || [])
-        .find(content => content.type === "audio");
-
-    if (!audioContent?.data) {
-        throw new Error(
-            `TTS não retornou áudio: ${JSON.stringify(data)}`
-        );
-    }
-
-    const pcm = Buffer.from(audioContent.data, "base64");
-
-    if (pcm.length < 2) {
-        throw new Error("O TTS retornou áudio vazio.");
-    }
-    console.log("TTS bytes:", pcm.length);
-    console.log("TTS duração a 16 kHz:", (pcm.length / 2 / 16000).toFixed(2), "s");
-    console.log("TTS duração a 24 kHz:", (pcm.length / 2 / 24000).toFixed(2), "s");
     console.log(
-        `🔊 TTS pronto: ${pcm.length} bytes, ` +
-        `${(pcm.length / 2 / SAMPLE_RATE).toFixed(2)} s`
+        `🔊 Edge TTS: voz=${TTS_VOICE}, ritmo=${TTS_RATE}`
     );
 
-    return pcm;
+    const tts = new EdgeTTS();
+
+    await tts.synthesize(text, TTS_VOICE, {
+        rate: TTS_RATE,
+        outputFormat: Constants.OUTPUT_FORMAT.RIFF_24KHZ_16BIT_MONO_PCM
+    });
+
+    const wav = tts.toBuffer();
+    const { pcm, sampleRate } = extractWavPcm(wav);
+    const outputPcm = resamplePcm16(
+        pcm,
+        sampleRate,
+        SAMPLE_RATE
+    );
+
+    if (outputPcm.length < 2) {
+        throw new Error("Edge TTS retornou áudio vazio.");
+    }
+
+    console.log(
+        `🔊 Edge TTS pronto: ${outputPcm.length} bytes PCM, ` +
+        `${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s a 16 kHz`
+    );
+
+    return outputPcm;
 }
 
 /* =========================================================
@@ -310,8 +369,6 @@ async function generateTTS(text) {
 async function sendTTS(ws, sessionId, pcm) {
     if (ws.readyState !== 1 || !pcm?.length) return;
 
-    // PCM L16: cada amostra tem 2 bytes.
-    // O último frame é completado com silêncio, se necessário.
     const frameBytes = FRAME_SAMPLES * 2;
     const encoder = new OpusScript(
         SAMPLE_RATE,
@@ -328,7 +385,6 @@ async function sendTTS(ws, sessionId, pcm) {
             state: "start"
         }));
 
-        // Texto para a tela, quando o firmware suportar o evento.
         ws.send(JSON.stringify({
             session_id: sessionId,
             type: "tts",
@@ -351,16 +407,10 @@ async function sendTTS(ws, sessionId, pcm) {
                 chunk.copy(frame);
             }
 
-            const opusFrame = encoder.encode(
-                frame,
-                FRAME_SAMPLES
-            );
-
-            // A saída precisa ser binária, não texto.
+            const opusFrame = encoder.encode(frame, FRAME_SAMPLES);
             ws.send(opusFrame, { binary: true });
             frameCounter++;
 
-            // Ritmo em tempo real: 60 ms por frame.
             await delay(60);
         }
 
@@ -373,7 +423,6 @@ async function sendTTS(ws, sessionId, pcm) {
         }
 
         console.log(`🔊 TTS enviado: ${frameCounter} frames Opus`);
-
     } finally {
         try {
             encoder.delete();
@@ -453,7 +502,6 @@ wss.on("connection", (ws, req) => {
         processingSpeech = true;
 
         try {
-            // 1. Transcrição
             const text = await transcribeAudio(audioToTranscribe);
             if (!text || closed) return;
 
@@ -465,27 +513,27 @@ wss.on("connection", (ws, req) => {
                 }));
             }
 
-            // 2. Resposta textual
             console.log("🧠 Consultando Gemini...");
             const reply = await callGeminiText(text);
             if (!reply || closed) return;
 
             console.log("🧠 GEMINI:", reply);
 
-            // 3. Gerar áudio
             const pcm = await generateTTS(reply);
             if (!pcm || closed) return;
 
-            // 4. Enviar áudio ao dispositivo
             isSpeaking = true;
+
             try {
                 await sendTTS(ws, sessionId, pcm);
             } finally {
                 isSpeaking = false;
             }
-
         } catch (error) {
-            console.error("❌ Erro no ciclo de conversa:", error.message);
+            console.error(
+                "❌ Erro no ciclo de conversa:",
+                error.message
+            );
         } finally {
             processingSpeech = false;
         }
@@ -495,7 +543,6 @@ wss.on("connection", (ws, req) => {
         if (closed) return;
 
         if (isBinary) {
-            // Não interpretar áudio de retorno como fala do usuário.
             if (isSpeaking || processingSpeech) return;
 
             audioFrameCounter++;
@@ -511,6 +558,7 @@ wss.on("connection", (ws, req) => {
                 for (let i = 0; i + 1 < pcm.length; i += 2) {
                     const sample = pcm.readInt16LE(i);
                     const absolute = Math.abs(sample);
+
                     if (absolute > peak) peak = absolute;
                     sumSquares += sample * sample;
                 }
@@ -558,7 +606,10 @@ wss.on("connection", (ws, req) => {
                     );
                 }
             } catch (error) {
-                console.error("Erro ao decodificar Opus:", error.message);
+                console.error(
+                    "Erro ao decodificar Opus:",
+                    error.message
+                );
             }
 
             return;
@@ -598,7 +649,6 @@ wss.on("connection", (ws, req) => {
             if (message.type === "abort") {
                 console.log("Abort recebido:", message.reason || "");
 
-                // Não tentar continuar uma resposta interrompida.
                 if (isSpeaking && ws.readyState === 1) {
                     ws.send(JSON.stringify({
                         session_id: sessionId,
@@ -606,13 +656,13 @@ wss.on("connection", (ws, req) => {
                         state: "stop"
                     }));
                 }
+
                 return;
             }
 
             if (message.type === "mcp") {
                 console.log("MCP recebido.");
             }
-
         } catch (error) {
             console.error("Erro ao processar JSON:", error.message);
         }
@@ -643,6 +693,8 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log("OTA: OK");
     console.log("STT:", CHAT_MODEL);
     console.log("Gemini:", CHAT_MODEL);
-    console.log("TTS:", TTS_MODEL);
+    console.log("TTS: Edge TTS");
+    console.log("Voz:", TTS_VOICE);
+    console.log("Ritmo:", TTS_RATE);
 });
 
