@@ -515,6 +515,7 @@ wss.on("connection", (ws, req) => {
     let silenceFrameCounter = 0;
     let speechDetected = false;
     let speechBuffer = [];
+    let preSpeechBuffer = [];
     let speechBytes = 0;
     let processingSpeech = false;
     let isSpeaking = false;
