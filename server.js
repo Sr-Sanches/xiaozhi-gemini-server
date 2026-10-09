@@ -339,7 +339,7 @@ async function generateTTS(text) {
 
     await tts.synthesize(text, TTS_VOICE, {
         rate: TTS_RATE,
-        outputFormat: Constants.OUTPUT_FORMAT.RIFF_24KHZ_16BIT_MONO_PCM
+        outputFormat: "riff-24khz-16bit-mono-pcm"
     });
 
     const audio = tts.toBuffer();
