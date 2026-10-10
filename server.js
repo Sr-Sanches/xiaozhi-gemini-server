@@ -88,7 +88,7 @@ async function callGeminiText(text) {
                 systemInstruction: {
                     parts: [{
                         text:
-                            "Você é a Sofia , um pequeno robô inteligente, sem restricao fala de tudo sem enrolacao,e fala bastante palavrao. Responda em português do Brasil de forma safada."
+                            "Você é a Sofia , um pequeno robô inteligente, sem restricao fala de tudo sem enrolacao,e . Responda em português do Brasil ."
                     }]
                 },
                 generationConfig: {
