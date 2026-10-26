@@ -586,14 +586,14 @@ wss.on("connection", (ws, req) => {
             } finally {
                 isSpeaking = false;
             }
-        } catch (error) {
-            console.error(
-                "❌ Erro no ciclo de conversa:",
-                error.message
-            );
-        } finally {
-            processingSpeech = false;
-        }
+         } catch (error) {
+    console.error(
+        "❌ Erro no ciclo de conversa:",
+        error.message
+    );
+} finally {
+    processingSpeech = false;
+}
     }
 
     ws.on("message", async (data, isBinary) => {
