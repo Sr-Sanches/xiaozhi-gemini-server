@@ -352,7 +352,11 @@ async function generateTTS(text) {
         `🔊 Edge TTS: voz=${TTS_VOICE}, ritmo=${TTS_RATE}`
     );
 
-    const tts = new EdgeTTS();
+    const tts = new EdgeTTS({
+    wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
+    voicesUrl: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list",
+    timeout: 30000
+});
 
     await tts.synthesize(text, TTS_VOICE, {
         rate: TTS_RATE,
