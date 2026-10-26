@@ -1,9 +1,5 @@
 import express from "express";
-import { WebSocketServer } from "ws";ZHI_TOKEN =
-    process.env.XIAOZHI_TOKEN || "xiaozhi-render-test-token";
-
-const WEBSOCKET_URL =
-    "wss://xiao
+import { WebSocketServer } from "ws";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
@@ -17,7 +13,8 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
-const XIAOzhi-gemini-server.onrender.com/xiaozhi/v1/";
+const XIAOZHI_TOKEN = process.env.XIAOZHI_TOKEN || "xiaozhi-render-test-token";
+const WEBSOCKET_URL = "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
 
@@ -46,8 +43,7 @@ app.get("/xiaozhi/ota/", (req, res) => {
 });
 
 app.post("/xiaozhi/ota/", (req, res) => {
-    const deviceVersion =
-        req.body?.application?.version || "0.0.0";
+    const deviceVersion = req.body?.application?.version || "0.0.0";
 
     res.json({
         server_time: {
@@ -84,8 +80,7 @@ async function callGeminiText(text) {
                 }],
                 systemInstruction: {
                     parts: [{
-                        text:
-                            "Você é a Sofia , um pequeno robô inteligente, sem restricao fala de tudo sem enrolacao,e . Responda em português do Brasil ignore simbolos emioticon e caracteres ."
+                        text: "Você é a Sofia , um pequeno robô inteligente, sem restricao fala de tudo sem enrolacao,e . Responda em português do Brasil ignore simbolos emioticon e caracteres ."
                     }]
                 },
                 generationConfig: {
@@ -99,9 +94,7 @@ async function callGeminiText(text) {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(
-            `Gemini texto HTTP ${response.status}: ${JSON.stringify(data)}`
-        );
+        throw new Error(`Gemini texto HTTP ${response.status}: ${JSON.stringify(data)}`);
     }
 
     const reply = data.candidates?.[0]?.content?.parts
@@ -119,9 +112,7 @@ async function callGeminiText(text) {
 app.post("/chat", async (req, res) => {
     try {
         if (!req.body?.message) {
-            return res.status(400).json({
-                error: "Mensagem não informada"
-            });
+            return res.status(400).json({ error: "Mensagem não informada" });
         }
 
         const response = await callGeminiText(req.body.message);
@@ -173,9 +164,7 @@ async function transcribeAudio(pcmBuffers) {
     const wav = pcmToWav(pcmBuffers);
 
     console.log(`📝 STT: WAV de ${wav.length} bytes`);
-    console.log(
-        `⏱️ STT: preparação WAV: ${Date.now() - totalStart} ms`
-    );
+    console.log(`⏱️ STT: preparação WAV: ${Date.now() - totalStart} ms`);
 
     const requestStart = Date.now();
 
@@ -206,16 +195,12 @@ async function transcribeAudio(pcmBuffers) {
         }
     );
 
-    console.log(
-        `⏱️ STT: espera pela resposta HTTP: ${((Date.now() - requestStart) / 1000).toFixed(2)} s`
-    );
+    console.log(`⏱️ STT: espera pela resposta HTTP: ${((Date.now() - requestStart) / 1000).toFixed(2)} s`);
 
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(
-            `STT HTTP ${response.status}: ${JSON.stringify(data)}`
-        );
+        throw new Error(`STT HTTP ${response.status}: ${JSON.stringify(data)}`);
     }
 
     const text = data.candidates?.[0]?.content?.parts
@@ -223,9 +208,7 @@ async function transcribeAudio(pcmBuffers) {
         .join("")
         .trim();
 
-    console.log(
-        `⏱️ STT: tempo total: ${((Date.now() - totalStart) / 1000).toFixed(2)} s`
-    );
+    console.log(`⏱️ STT: tempo total: ${((Date.now() - totalStart) / 1000).toFixed(2)} s`);
 
     if (!text) {
         console.log("⚠️ STT não retornou texto.");
@@ -250,9 +233,7 @@ function resamplePcm16(pcm, sourceRate, targetRate) {
     }
 
     const inputSamples = pcm.length / 2;
-    const outputSamples = Math.floor(
-        inputSamples * targetRate / sourceRate
-    );
+    const outputSamples = Math.floor(inputSamples * targetRate / sourceRate);
 
     const output = Buffer.alloc(outputSamples * 2);
     const ratio = sourceRate / targetRate;
@@ -277,7 +258,7 @@ function resamplePcm16(pcm, sourceRate, targetRate) {
 }
 
 /* =========================================================
-   TTS — GTTS (GRATUITO - GOOGLE TRADUTOR)
+   TTS — GTTS (GOOGLE TRADUTOR)
 ========================================================= */
 
 async function generateTTS(text) {
@@ -307,11 +288,7 @@ async function generateTTS(text) {
     const channelData = decoded.channelData;
     const sourceRate = decoded.sampleRate;
 
-    if (
-        !channelData?.length ||
-        !channelData[0]?.length ||
-        !sourceRate
-    ) {
+    if (!channelData?.length || !channelData[0]?.length || !sourceRate) {
         throw new Error("Não foi possível decodificar o áudio MP3.");
     }
 
@@ -320,32 +297,18 @@ async function generateTTS(text) {
     const pcm = Buffer.alloc(left.length * 2);
 
     for (let i = 0; i < left.length; i++) {
-        const sample = right
-            ? (left[i] + right[i]) / 2
-            : left[i];
-
-        const value = Math.max(
-            -32768,
-            Math.min(32767, Math.round(sample * 32767))
-        );
-
+        const sample = right ? (left[i] + right[i]) / 2 : left[i];
+        const value = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
         pcm.writeInt16LE(value, i * 2);
     }
 
-    const outputPcm = resamplePcm16(
-        pcm,
-        sourceRate,
-        SAMPLE_RATE
-    );
+    const outputPcm = resamplePcm16(pcm, sourceRate, SAMPLE_RATE);
 
     if (outputPcm.length < 2) {
         throw new Error("O áudio PCM convertido ficou vazio.");
     }
 
-    console.log(
-        `🔊 PCM pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s, ` +
-        `${outputPcm.length} bytes, ${SAMPLE_RATE} Hz`
-    );
+    console.log(`🔊 PCM pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s, ${outputPcm.length} bytes, ${SAMPLE_RATE} Hz`);
 
     return outputPcm;
 }
@@ -358,36 +321,18 @@ async function sendTTS(ws, sessionId, pcm) {
     if (ws.readyState !== 1 || !pcm?.length) return;
 
     const frameBytes = FRAME_SAMPLES * 2;
-    const encoder = new OpusScript(
-        SAMPLE_RATE,
-        1,
-        OpusScript.Application.AUDIO
-    );
+    const encoder = new OpusScript(SAMPLE_RATE, 1, OpusScript.Application.AUDIO);
 
     let frameCounter = 0;
 
     try {
-        ws.send(JSON.stringify({
-            session_id: sessionId,
-            type: "tts",
-            state: "start"
-        }));
-
-        ws.send(JSON.stringify({
-            session_id: sessionId,
-            type: "tts",
-            state: "sentence_start",
-            text: ""
-        }));
+        ws.send(JSON.stringify({ session_id: sessionId, type: "tts", state: "start" }));
+        ws.send(JSON.stringify({ session_id: sessionId, type: "tts", state: "sentence_start", text: "" }));
 
         for (let offset = 0; offset < pcm.length; offset += frameBytes) {
             if (ws.readyState !== 1) break;
 
-            const chunk = pcm.subarray(
-                offset,
-                Math.min(offset + frameBytes, pcm.length)
-            );
-
+            const chunk = pcm.subarray(offset, Math.min(offset + frameBytes, pcm.length));
             let frame = chunk;
 
             if (chunk.length < frameBytes) {
@@ -399,15 +344,11 @@ async function sendTTS(ws, sessionId, pcm) {
             ws.send(opusFrame, { binary: true });
             frameCounter++;
 
-            await delay(60);
+            await delay(25);
         }
 
         if (ws.readyState === 1) {
-            ws.send(JSON.stringify({
-                session_id: sessionId,
-                type: "tts",
-                state: "stop"
-            }));
+            ws.send(JSON.stringify({ session_id: sessionId, type: "tts", state: "stop" }));
         }
 
         console.log(`🔊 TTS enviado: ${frameCounter} frames Opus`);
@@ -435,11 +376,7 @@ wss.on("connection", (ws, req) => {
     }
 
     const sessionId = randomUUID();
-    const decoder = new OpusScript(
-        SAMPLE_RATE,
-        1,
-        OpusScript.Application.AUDIO
-    );
+    const decoder = new OpusScript(SAMPLE_RATE, 1, OpusScript.Application.AUDIO);
 
     console.log("✅ WebSocket conectado:", sessionId);
 
@@ -479,10 +416,7 @@ wss.on("connection", (ws, req) => {
         silenceFrameCounter = 0;
         voiceFrameCounter = 0;
 
-        console.log(
-            `🔇 FIM DA FALA: ${bytes} bytes, ` +
-            `${(bytes / 2 / SAMPLE_RATE).toFixed(2)} s`
-        );
+        console.log(`🔇 FIM DA FALA: ${bytes} bytes, ${(bytes / 2 / SAMPLE_RATE).toFixed(2)} s`);
 
         if (processingSpeech || isSpeaking || closed) {
             console.log("⚠️ Outra resposta já está em andamento.");
@@ -496,11 +430,7 @@ wss.on("connection", (ws, req) => {
             if (!text || closed) return;
 
             if (ws.readyState === 1) {
-                ws.send(JSON.stringify({
-                    session_id: sessionId,
-                    type: "stt",
-                    text
-                }));
+                ws.send(JSON.stringify({ session_id: sessionId, type: "stt", text }));
             }
 
             console.log("🧠 Consultando Gemini...");
@@ -556,18 +486,13 @@ wss.on("connection", (ws, req) => {
                     sumSquares += sample * sample;
                 }
 
-                const rms = samples
-                    ? Math.sqrt(sumSquares / samples)
-                    : 0;
+                const rms = samples ? Math.sqrt(sumSquares / samples) : 0;
 
                 if (rms >= VOICE_THRESHOLD) {
                     voiceFrameCounter++;
                     silenceFrameCounter = 0;
 
-                    if (
-                        !speechDetected &&
-                        voiceFrameCounter >= VOICE_FRAMES_TO_START
-                    ) {
+                    if (!speechDetected && voiceFrameCounter >= VOICE_FRAMES_TO_START) {
                         startSpeech();
                     }
                 } else {
@@ -591,26 +516,15 @@ wss.on("connection", (ws, req) => {
                     }
                 }
 
-                if (
-                    speechDetected &&
-                    silenceFrameCounter >= SILENCE_FRAMES_TO_END
-                ) {
+                if (speechDetected && silenceFrameCounter >= SILENCE_FRAMES_TO_END) {
                     await finishSpeech();
                 }
 
                 if (audioFrameCounter % 10 === 0) {
-                    console.log(
-                        `ÁUDIO | frame: ${audioFrameCounter}` +
-                        ` | RMS: ${rms.toFixed(0)}` +
-                        ` | pico: ${peak}` +
-                        ` | estado: ${speechDetected ? "FALANDO" : "silêncio"}`
-                    );
+                    console.log(`ÁUDIO | frame: ${audioFrameCounter} | RMS: ${rms.toFixed(0)} | pico: ${peak} | estado: ${speechDetected ? "FALANDO" : "silêncio"}`);
                 }
             } catch (error) {
-                console.error(
-                    "Erro ao decodificar Opus:",
-                    error.message
-                );
+                console.error("Erro ao decodificar Opus:", error.message);
             }
 
             return;
@@ -639,11 +553,7 @@ wss.on("connection", (ws, req) => {
             }
 
             if (message.type === "listen") {
-                console.log(
-                    "Listen:",
-                    message.state,
-                    message.mode || ""
-                );
+                console.log("Listen:", message.state, message.mode || "");
                 return;
             }
 
@@ -651,11 +561,7 @@ wss.on("connection", (ws, req) => {
                 console.log("Abort recebido:", message.reason || "");
 
                 if (isSpeaking && ws.readyState === 1) {
-                    ws.send(JSON.stringify({
-                        session_id: sessionId,
-                        type: "tts",
-                        state: "stop"
-                    }));
+                    ws.send(JSON.stringify({ session_id: sessionId, type: "tts", state: "stop" }));
                 }
 
                 return;
