@@ -21,7 +21,7 @@ const WEBSOCKET_URL =
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
 
-const SAMPLE_RATE = 2200;
+const SAMPLE_RATE = 22050;
 const FRAME_SAMPLES = 960;
 
 const VOICE_THRESHOLD = 2500;
