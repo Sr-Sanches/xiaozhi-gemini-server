@@ -255,28 +255,28 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log("🔊 Gerando voz via StreamElements TTS...");
+    console.log("🔊 Gerando voz via Google Speech API...");
 
-    // Utiliza a voz em português do Brasil (Ricardo ou Vitória/Camila) de alta qualidade
-    const voice = "Vitoria"; // ou "Ricardo"
     const encodedText = encodeURIComponent(text);
-    const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodedText}`;
+    // Endpoint REST nativo com cliente otimizado para áudio limpo
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=pt-BR&total=1&idx=0&textlen=${text.length}&client=tw-ob&prev=input&ttsspeed=1`;
 
     const response = await fetch(ttsUrl, {
         headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://translate.google.com/"
         }
     });
 
     if (!response.ok) {
-        throw new Error(`StreamElements TTS HTTP error! status: ${response.status}`);
+        throw new Error(`Google Speech HTTP error! status: ${response.status}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const audio = Buffer.from(arrayBuffer);
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error("StreamElements TTS retornou áudio inválido.");
+        throw new Error("Google Speech retornou áudio inválido.");
     }
 
     console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
