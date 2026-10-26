@@ -255,23 +255,27 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log(`🔊 Gerando voz via Edge TTS (${TTS_VOICE})...`);
+    console.log(`🔊 Edge TTS: voz=${TTS_VOICE}, ritmo=${TTS_RATE}`);
 
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(TTS_VOICE, "audio-24khz-48kbitrate-mono-mp3");
+    const tts = new EdgeTTS({
+        wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
+        voicesUrl: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list",
+        secMsGecVersion: "1-155.0.4283.45",
+        timeout: 30000
+    });
 
-    const audioStream = await tts.toStream(text);
-    const chunks = [];
+    await tts.synthesize(text, TTS_VOICE, {
+        rate: TTS_RATE,
+        outputFormat: "audio-24khz-48kbitrate-mono-mp3"
+    });
 
-    for await (const chunk of audioStream) {
-        chunks.push(chunk);
-    }
-
-    const audio = Buffer.concat(chunks);
+    const audio = tts.toBuffer();
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error("Edge TTS retornou áudio inválido.");
+        throw new Error(`Edge TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`);
     }
+
+    console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
 
     const decoded = await decodeMp3(audio);
     const channelData = decoded.channelData;
@@ -297,7 +301,7 @@ async function generateTTS(text) {
         throw new Error("O áudio PCM convertido ficou vazio.");
     }
 
-    console.log(`🔊 PCM de alta qualidade pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s`);
+    console.log(`🔊 PCM pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s, ${outputPcm.length} bytes, ${SAMPLE_RATE} Hz`);
 
     return outputPcm;
 }
