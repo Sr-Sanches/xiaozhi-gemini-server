@@ -255,7 +255,7 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log(`🔊 Edge TTS: voz=${TTS_VOICE}, ritmo=${TTS_RATE}`);
+    console.log(`🔊 Gerando voz via Edge TTS (${TTS_VOICE})...`);
 
     const tts = new EdgeTTS({
         wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
@@ -265,7 +265,7 @@ async function generateTTS(text) {
     });
 
     await tts.synthesize(text, TTS_VOICE, {
-        rate: TTS_RATE,
+        rate: "+0%",
         outputFormat: "audio-24khz-48kbitrate-mono-mp3"
     });
 
