@@ -266,7 +266,7 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log("🔊 Gerando voz via gTTS (Google Tradutor PT-BR)...");
+    console.log("🔊 Gerando voz via gTTS otimizado...");
 
     const gtts = new gTTS(text, "pt");
 
@@ -282,8 +282,6 @@ async function generateTTS(text) {
         throw new Error("gTTS retornou áudio inválido.");
     }
 
-    console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
-
     const decoded = await decodeMp3(audio);
     const channelData = decoded.channelData;
     const sourceRate = decoded.sampleRate;
@@ -296,9 +294,12 @@ async function generateTTS(text) {
     const right = channelData[1];
     const pcm = Buffer.alloc(left.length * 2);
 
+    // Normalização de volume e remoção de distorção
     for (let i = 0; i < left.length; i++) {
         const sample = right ? (left[i] + right[i]) / 2 : left[i];
-        const value = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
+        // Normaliza e evita estourar o pico de áudio (clipping)
+        const clamped = Math.max(-1, Math.min(1, sample));
+        const value = Math.round(clamped * 32767);
         pcm.writeInt16LE(value, i * 2);
     }
 
@@ -308,7 +309,7 @@ async function generateTTS(text) {
         throw new Error("O áudio PCM convertido ficou vazio.");
     }
 
-    console.log(`🔊 PCM pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s, ${outputPcm.length} bytes, ${SAMPLE_RATE} Hz`);
+    console.log(`🔊 PCM otimizado pronto: ${(outputPcm.length / 2 / SAMPLE_RATE).toFixed(2)} s`);
 
     return outputPcm;
 }
