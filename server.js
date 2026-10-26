@@ -255,24 +255,27 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log(`🔊 Gerando voz via Edge TTS (${TTS_VOICE})...`);
+    console.log("🔊 Gerando voz via Google Translate HTTP...");
 
-    const tts = new EdgeTTS({
-        wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
-        voicesUrl: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list",
-        secMsGecVersion: "1-155.0.4283.45",
-        timeout: 30000
+    // URL oficial pública do Google Translate TTS
+    const encodedText = encodeURIComponent(text);
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=pt&client=tw-ob`;
+
+    const response = await fetch(ttsUrl, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
     });
 
-    await tts.synthesize(text, TTS_VOICE, {
-        rate: "+0%",
-        outputFormat: "audio-24khz-48kbitrate-mono-mp3"
-    });
+    if (!response.ok) {
+        throw new Error(`Google TTS HTTP error! status: ${response.status}`);
+    }
 
-    const audio = tts.toBuffer();
+    const arrayBuffer = await response.arrayBuffer();
+    const audio = Buffer.from(arrayBuffer);
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error(`Edge TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`);
+        throw new Error("Google TTS retornou áudio inválido.");
     }
 
     console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
