@@ -3,7 +3,7 @@ import { WebSocketServer } from "ws";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { EdgeTTS } from "@andresaya/edge-tts";
+import { EdgeTTS, Constants } from "@andresaya/edge-tts";
 import decodeMp3 from "@audio/decode-mp3";
 
 const require = createRequire(import.meta.url);
