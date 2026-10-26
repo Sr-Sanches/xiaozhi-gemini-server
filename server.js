@@ -3,7 +3,7 @@ import { WebSocketServer } from "ws";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import OpenAI from "openai";
+import gTTS from "gtts";
 import decodeMp3 from "@audio/decode-mp3";
 
 const require = createRequire(import.meta.url);
@@ -21,10 +21,6 @@ const WEBSOCKET_URL =
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
 
-// Configurações do TTS da OpenAI
-const OPENAI_TTS_MODEL = "tts-1";
-const OPENAI_TTS_VOICE = "alloy"; // Opções: alloy, echo, fable, onyx, nova, shimmer
-
 const SAMPLE_RATE = 16000;
 const FRAME_SAMPLES = 960;
 
@@ -33,11 +29,6 @@ const SILENCE_FRAMES_TO_END = 15;
 const VOICE_FRAMES_TO_START = 4;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-// Inicializar cliente OpenAI
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
 
 /* =========================================================
    ROTAS HTTP
@@ -286,7 +277,7 @@ function resamplePcm16(pcm, sourceRate, targetRate) {
 }
 
 /* =========================================================
-   TTS — OPENAI TTS
+   TTS — GTTS (GRATUITO - GOOGLE TRADUTOR)
 ========================================================= */
 
 async function generateTTS(text) {
@@ -294,23 +285,20 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log(
-        `🔊 OpenAI TTS: modelo=${OPENAI_TTS_MODEL}, voz=${OPENAI_TTS_VOICE}`
-    );
+    console.log("🔊 Gerando voz via gTTS (Google Tradutor PT-BR)...");
 
-    const mp3Response = await openai.audio.speech.create({
-        model: OPENAI_TTS_MODEL,
-        voice: OPENAI_TTS_VOICE,
-        input: text,
-        response_format: "mp3",
+    const gtts = new gTTS(text, "pt");
+
+    const audio = await new Promise((resolve, reject) => {
+        const chunks = [];
+        const stream = gtts.stream();
+        stream.on("data", chunk => chunks.push(chunk));
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", err => reject(err));
     });
 
-    const audio = Buffer.from(await mp3Response.arrayBuffer());
-
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error(
-            `OpenAI TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`
-        );
+        throw new Error("gTTS retornou áudio inválido.");
     }
 
     console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
@@ -706,8 +694,5 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log("OTA: OK");
     console.log("STT:", CHAT_MODEL);
     console.log("Gemini:", CHAT_MODEL);
-    console.log("TTS: OpenAI TTS");
-    console.log("Modelo TTS:", OPENAI_TTS_MODEL);
-    console.log("Voz TTS:", OPENAI_TTS_VOICE);
+    console.log("TTS: gTTS (Google Tradutor)");
 });
-
