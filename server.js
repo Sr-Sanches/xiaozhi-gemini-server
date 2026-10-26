@@ -1,5 +1,9 @@
 import express from "express";
-import { WebSocketServer } from "ws";
+import { WebSocketServer } from "ws";ZHI_TOKEN =
+    process.env.XIAOZHI_TOKEN || "xiaozhi-render-test-token";
+
+const WEBSOCKET_URL =
+    "wss://xiao
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
@@ -13,15 +17,11 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
-const XIAOZHI_TOKEN =
-    process.env.XIAOZHI_TOKEN || "xiaozhi-render-test-token";
-
-const WEBSOCKET_URL =
-    "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
+const XIAOzhi-gemini-server.onrender.com/xiaozhi/v1/";
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
 
-const SAMPLE_RATE = 1600;
+const SAMPLE_RATE = 16000;
 const FRAME_SAMPLES = 960;
 
 const VOICE_THRESHOLD = 2500;
