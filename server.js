@@ -255,31 +255,28 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log("🔊 Gerando voz via Edge TTS (HTTP REST)...");
+    console.log("🔊 Gerando voz via StreamElements TTS...");
 
-    // Monta o XML de requisição do Edge TTS (SSML)
-    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='pt-BR'><voice name='pt-BR-FranciscaNeural'>${text}</voice></speak>`;
+    // Utiliza a voz em português do Brasil (Ricardo ou Vitória/Camila) de alta qualidade
+    const voice = "Vitoria"; // ou "Ricardo"
+    const encodedText = encodeURIComponent(text);
+    const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodedText}`;
 
-    // Endpoint REST público de conversão da Microsoft
-    const response = await fetch("https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?trustedclienttoken=6A5AA1D4EAFF4E9fb37e23d68491d6f4", {
-        method: "POST",
+    const response = await fetch(ttsUrl, {
         headers: {
-            "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-        },
-        body: ssml
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
     });
 
     if (!response.ok) {
-        throw new Error(`Edge TTS HTTP error! status: ${response.status}`);
+        throw new Error(`StreamElements TTS HTTP error! status: ${response.status}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const audio = Buffer.from(arrayBuffer);
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error("Edge TTS HTTP retornou áudio inválido.");
+        throw new Error("StreamElements TTS retornou áudio inválido.");
     }
 
     console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
@@ -312,7 +309,6 @@ async function generateTTS(text) {
 
     return outputPcm;
 }
-
 /* =========================================================
    ENVIAR PCM CODIFICADO EM OPUS AO ESP32
 ========================================================= */
