@@ -255,27 +255,31 @@ async function generateTTS(text) {
         throw new Error("Texto vazio para gerar voz.");
     }
 
-    console.log("🔊 Gerando voz via Google Translate HTTP...");
+    console.log("🔊 Gerando voz via Edge TTS (HTTP REST)...");
 
-    // URL oficial pública do Google Translate TTS
-    const encodedText = encodeURIComponent(text);
-    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=pt&client=tw-ob`;
+    // Monta o XML de requisição do Edge TTS (SSML)
+    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='pt-BR'><voice name='pt-BR-FranciscaNeural'>${text}</voice></speak>`;
 
-    const response = await fetch(ttsUrl, {
+    // Endpoint REST público de conversão da Microsoft
+    const response = await fetch("https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?trustedclienttoken=6A5AA1D4EAFF4E9fb37e23d68491d6f4", {
+        method: "POST",
         headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+        },
+        body: ssml
     });
 
     if (!response.ok) {
-        throw new Error(`Google TTS HTTP error! status: ${response.status}`);
+        throw new Error(`Edge TTS HTTP error! status: ${response.status}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const audio = Buffer.from(arrayBuffer);
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
-        throw new Error("Google TTS retornou áudio inválido.");
+        throw new Error("Edge TTS HTTP retornou áudio inválido.");
     }
 
     console.log(`🔊 MP3 recebido: ${audio.length} bytes`);
