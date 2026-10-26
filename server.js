@@ -3,7 +3,7 @@ import { WebSocketServer } from "ws";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { EdgeTTS, Constants } from "@andresaya/edge-tts";
+import OpenAI from "openai";
 import decodeMp3 from "@audio/decode-mp3";
 
 const require = createRequire(import.meta.url);
@@ -20,11 +20,12 @@ const WEBSOCKET_URL =
     "wss://xiaozhi-gemini-server.onrender.com/xiaozhi/v1/";
 
 const CHAT_MODEL = "gemini-3.5-flash-lite";
-const TTS_VOICE = "pt-BR-FranciscaNeural";
-const TTS_RATE = "+15%";
+
+// Configurações do TTS da OpenAI
+const OPENAI_TTS_MODEL = "tts-1";
+const OPENAI_TTS_VOICE = "alloy"; // Opções: alloy, echo, fable, onyx, nova, shimmer
 
 const SAMPLE_RATE = 16000;
-const EDGE_SAMPLE_RATE = 24000;
 const FRAME_SAMPLES = 960;
 
 const VOICE_THRESHOLD = 2500;
@@ -32,6 +33,11 @@ const SILENCE_FRAMES_TO_END = 15;
 const VOICE_FRAMES_TO_START = 4;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Inicializar cliente OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 /* =========================================================
    ROTAS HTTP
@@ -173,7 +179,6 @@ async function transcribeAudio(pcmBuffers) {
     if (!pcmBuffers?.length) return null;
 
     const totalStart = Date.now();
-
     const wav = pcmToWav(pcmBuffers);
 
     console.log(`📝 STT: WAV de ${wav.length} bytes`);
@@ -240,68 +245,9 @@ async function transcribeAudio(pcmBuffers) {
     return text;
 }
 
-
 /* =========================================================
-   EDGE TTS WAV — EXTRAIR PCM E CONVERTER PARA 16 kHz
+   FUNÇÃO DE RESAMPLE DE PCM
 ========================================================= */
-
-function extractWavPcm(wav) {
-    if (!Buffer.isBuffer(wav) || wav.length < 12) {
-        throw new Error("Edge TTS retornou um WAV inválido.");
-    }
-
-    if (
-        wav.toString("ascii", 0, 4) !== "RIFF" ||
-        wav.toString("ascii", 8, 12) !== "WAVE"
-    ) {
-        throw new Error("O áudio do Edge TTS não está no formato WAV.");
-    }
-
-    let offset = 12;
-    let sampleRate = 0;
-    let channels = 0;
-    let bitsPerSample = 0;
-    let audioFormat = 0;
-    let pcm = null;
-
-    while (offset + 8 <= wav.length) {
-        const chunkId = wav.toString("ascii", offset, offset + 4);
-        const chunkSize = wav.readUInt32LE(offset + 4);
-        const start = offset + 8;
-        const end = start + chunkSize;
-
-        if (end > wav.length) {
-            throw new Error("Chunk WAV incompleto.");
-        }
-
-        if (chunkId === "fmt ") {
-            audioFormat = wav.readUInt16LE(start);
-            channels = wav.readUInt16LE(start + 2);
-            sampleRate = wav.readUInt32LE(start + 4);
-            bitsPerSample = wav.readUInt16LE(start + 14);
-        }
-
-        if (chunkId === "data") {
-            pcm = wav.subarray(start, end);
-        }
-
-        offset = end + (chunkSize % 2);
-    }
-
-    if (
-        audioFormat !== 1 ||
-        channels !== 1 ||
-        bitsPerSample !== 16 ||
-        !sampleRate ||
-        !pcm?.length
-    ) {
-        throw new Error(
-            `Formato WAV incompatível: formato=${audioFormat}, canais=${channels}, bits=${bitsPerSample}, Hz=${sampleRate}`
-        );
-    }
-
-    return { pcm, sampleRate };
-}
 
 function resamplePcm16(pcm, sourceRate, targetRate) {
     if (sourceRate === targetRate) {
@@ -340,7 +286,7 @@ function resamplePcm16(pcm, sourceRate, targetRate) {
 }
 
 /* =========================================================
-   TTS — EDGE TTS
+   TTS — OPENAI TTS
 ========================================================= */
 
 async function generateTTS(text) {
@@ -349,26 +295,21 @@ async function generateTTS(text) {
     }
 
     console.log(
-        `🔊 Edge TTS: voz=${TTS_VOICE}, ritmo=${TTS_RATE}`
+        `🔊 OpenAI TTS: modelo=${OPENAI_TTS_MODEL}, voz=${OPENAI_TTS_VOICE}`
     );
 
-    const tts = new EdgeTTS({
-    wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
-    voicesUrl: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list",
-    secMsGecVersion: "1-155.0.4283.45",
-    timeout: 30000
-});
-
-    await tts.synthesize(text, TTS_VOICE, {
-        rate: TTS_RATE,
-        outputFormat: "audio-24khz-48kbitrate-mono-mp3"
+    const mp3Response = await openai.audio.speech.create({
+        model: OPENAI_TTS_MODEL,
+        voice: OPENAI_TTS_VOICE,
+        input: text,
+        response_format: "mp3",
     });
 
-    const audio = tts.toBuffer();
+    const audio = Buffer.from(await mp3Response.arrayBuffer());
 
     if (!Buffer.isBuffer(audio) || audio.length < 100) {
         throw new Error(
-            `Edge TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`
+            `OpenAI TTS retornou áudio inválido: ${audio?.length ?? 0} bytes`
         );
     }
 
@@ -420,7 +361,6 @@ async function generateTTS(text) {
 
     return outputPcm;
 }
-
 
 /* =========================================================
    ENVIAR PCM CODIFICADO EM OPUS AO ESP32
@@ -527,16 +467,16 @@ wss.on("connection", (ws, req) => {
     let closed = false;
 
     function startSpeech() {
-    if (speechDetected || processingSpeech || isSpeaking) return;
+        if (speechDetected || processingSpeech || isSpeaking) return;
 
-    speechDetected = true;
-    silenceFrameCounter = 0;
-    speechBuffer = [...preSpeechBuffer];
-    speechBytes = speechBuffer.reduce((total, frame) => total + frame.length, 0);
-    preSpeechBuffer = [];
+        speechDetected = true;
+        silenceFrameCounter = 0;
+        speechBuffer = [...preSpeechBuffer];
+        speechBytes = speechBuffer.reduce((total, frame) => total + frame.length, 0);
+        preSpeechBuffer = [];
 
-    console.log("🎤 VOZ DETECTADA");
-}
+        console.log("🎤 VOZ DETECTADA");
+    }
 
     async function finishSpeech() {
         if (!speechDetected) return;
@@ -591,17 +531,17 @@ wss.on("connection", (ws, req) => {
             } finally {
                 isSpeaking = false;
             }
-         } catch (error) {
-    console.error("❌ Erro no ciclo de conversa:", {
-        message: error.message,
-        code: error.code,
-        status: error.status,
-        cause: error.cause?.message,
-        stack: error.stack
-    });
-} finally {
-    processingSpeech = false;
-}
+        } catch (error) {
+            console.error("❌ Erro no ciclo de conversa:", {
+                message: error.message,
+                code: error.code,
+                status: error.status,
+                cause: error.cause?.message,
+                stack: error.stack
+            });
+        } finally {
+            processingSpeech = false;
+        }
     }
 
     ws.on("message", async (data, isBinary) => {
@@ -655,7 +595,6 @@ wss.on("connection", (ws, req) => {
                     speechBytes += pcm.length;
                 }
 
-                
                 if (!speechDetected) {
                     preSpeechBuffer.push(pcm);
 
@@ -767,8 +706,8 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log("OTA: OK");
     console.log("STT:", CHAT_MODEL);
     console.log("Gemini:", CHAT_MODEL);
-    console.log("TTS: Edge TTS");
-    console.log("Voz:", TTS_VOICE);
-    console.log("Ritmo:", TTS_RATE);
+    console.log("TTS: OpenAI TTS");
+    console.log("Modelo TTS:", OPENAI_TTS_MODEL);
+    console.log("Voz TTS:", OPENAI_TTS_VOICE);
 });
 
