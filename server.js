@@ -355,6 +355,7 @@ async function generateTTS(text) {
     const tts = new EdgeTTS({
     wssUrl: "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1",
     voicesUrl: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list",
+    secMsGecVersion: "1-155.0.4283.45",
     timeout: 30000
 });
 
