@@ -6,7 +6,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "edge-tts": "file:@andresaya/edge-tts",
+    "@andresaya/edge-tts": "^1.9.1",
     "express": "^5.0.0",
     "ws": "^8.18.0",
     "@audio/decode-mp3": "^1.3.1",
