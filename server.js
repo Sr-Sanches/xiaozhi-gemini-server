@@ -591,10 +591,13 @@ wss.on("connection", (ws, req) => {
                 isSpeaking = false;
             }
          } catch (error) {
-    console.error(
-        "❌ Erro no ciclo de conversa:",
-        error.message
-    );
+    console.error("❌ Erro no ciclo de conversa:", {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        cause: error.cause?.message,
+        stack: error.stack
+    });
 } finally {
     processingSpeech = false;
 }
